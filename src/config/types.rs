@@ -375,6 +375,11 @@ pub struct GeneralConfig {
     #[serde(default)]
     pub data_path: Option<PathBuf>,
 
+    /// Reject unknown TOML config keys during load.
+    /// Startup fails fast; hot-reload rejects the new snapshot and keeps the current config.
+    #[serde(default)]
+    pub config_strict: bool,
+
     #[serde(default)]
     pub modes: ProxyModes,
 
@@ -974,6 +979,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             data_path: None,
+            config_strict: false,
             modes: ProxyModes::default(),
             prefer_ipv6: false,
             fast_mode: default_true(),
