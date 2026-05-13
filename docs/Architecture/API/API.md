@@ -1251,7 +1251,7 @@ All mutating endpoints:
 Docker deployment note:
 - Mutating endpoints require `config.toml` to live inside a writable mounted directory.
 - Do not mount `config.toml` as a single bind-mounted file when API mutations are enabled; atomic `tmp + rename` writes can fail with `Device or resource busy`.
-- Mount the config directory instead, for example `./telemt-config:/run/telemt:rw`, and start Telemt with `/run/telemt/config.toml`.
+- Mount the config directory instead, for example `./config:/etc/telemt:rw`, and start Telemt with `/etc/telemt/config.toml`.
 - A read-only single-file mount remains valid only for read-only deployments or when `[server.api].read_only=true`.
 
 Delete path cleanup guarantees:

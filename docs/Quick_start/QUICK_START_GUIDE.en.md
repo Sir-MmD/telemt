@@ -260,9 +260,12 @@ Example writable config mount for Control API mutations:
 ```yaml
 services:
   telemt:
+    working_dir: /run/telemt
     volumes:
-      - ./telemt-config:/run/telemt:rw
-    command: /usr/local/bin/telemt /run/telemt/config.toml
+      - ./config:/etc/telemt:rw
+    tmpfs:
+      - /run/telemt:rw,mode=1777,size=4m
+    command: /usr/local/bin/telemt /etc/telemt/config.toml
 ```
 
 **Run without Compose**
