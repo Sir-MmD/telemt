@@ -3,6 +3,7 @@ use std::net::IpAddr;
 use hyper::StatusCode;
 
 use crate::config::ProxyConfig;
+use crate::config::RateLimitBps;
 use crate::ip_tracker::UserIpTracker;
 use crate::stats::Stats;
 
@@ -27,6 +28,8 @@ pub(super) async fn create_user(
     let touches_user_max_tcp_conns = body.max_tcp_conns.is_some();
     let touches_user_expirations = body.expiration_rfc3339.is_some();
     let touches_user_data_quota = body.data_quota_bytes.is_some();
+    let touches_user_rate_limits =
+        body.rate_limit_up_bps.is_some() || body.rate_limit_down_bps.is_some();
     let touches_user_max_unique_ips = body.max_unique_ips.is_some();
 
     if !is_valid_username(&body.username) {
@@ -91,6 +94,15 @@ pub(super) async fn create_user(
             .user_data_quota
             .insert(body.username.clone(), quota);
     }
+    if touches_user_rate_limits {
+        cfg.access.user_rate_limits.insert(
+            body.username.clone(),
+            RateLimitBps {
+                up_bps: body.rate_limit_up_bps.unwrap_or(0),
+                down_bps: body.rate_limit_down_bps.unwrap_or(0),
+            },
+        );
+    }
 
     let updated_limit = body.max_unique_ips;
     if let Some(limit) = updated_limit {
@@ -114,6 +126,9 @@ pub(super) async fn create_user(
     }
     if touches_user_data_quota {
         touched_sections.push(AccessSection::UserDataQuota);
+    }
+    if touches_user_rate_limits {
+        touched_sections.push(AccessSection::UserRateLimits);
     }
     if touches_user_max_unique_ips {
         touched_sections.push(AccessSection::UserMaxUniqueIps);
@@ -157,6 +172,8 @@ pub(super) async fn create_user(
                     .then_some(cfg.access.user_max_tcp_conns_global_each)),
             expiration_rfc3339: None,
             data_quota_bytes: None,
+            rate_limit_up_bps: body.rate_limit_up_bps.filter(|limit| *limit > 0),
+            rate_limit_down_bps: body.rate_limit_down_bps.filter(|limit| *limit > 0),
             max_unique_ips: updated_limit,
             current_connections: 0,
             active_unique_ips: 0,
@@ -181,6 +198,8 @@ pub(super) async fn patch_user(
     let touches_user_max_tcp_conns = !matches!(&body.max_tcp_conns, Patch::Unchanged);
     let touches_user_expirations = !matches!(&body.expiration_rfc3339, Patch::Unchanged);
     let touches_user_data_quota = !matches!(&body.data_quota_bytes, Patch::Unchanged);
+    let touches_user_rate_limits = !matches!(&body.rate_limit_up_bps, Patch::Unchanged)
+        || !matches!(&body.rate_limit_down_bps, Patch::Unchanged);
     let touches_user_max_unique_ips = !matches!(&body.max_unique_ips, Patch::Unchanged);
 
     if let Some(secret) = body.secret.as_ref()
@@ -253,6 +272,31 @@ pub(super) async fn patch_user(
             cfg.access.user_data_quota.insert(user.to_string(), quota);
         }
     }
+    if touches_user_rate_limits {
+        let mut rate_limit = cfg
+            .access
+            .user_rate_limits
+            .get(user)
+            .copied()
+            .unwrap_or_default();
+        match body.rate_limit_up_bps {
+            Patch::Unchanged => {}
+            Patch::Remove => rate_limit.up_bps = 0,
+            Patch::Set(limit) => rate_limit.up_bps = limit,
+        }
+        match body.rate_limit_down_bps {
+            Patch::Unchanged => {}
+            Patch::Remove => rate_limit.down_bps = 0,
+            Patch::Set(limit) => rate_limit.down_bps = limit,
+        }
+        if rate_limit.up_bps == 0 && rate_limit.down_bps == 0 {
+            cfg.access.user_rate_limits.remove(user);
+        } else {
+            cfg.access
+                .user_rate_limits
+                .insert(user.to_string(), rate_limit);
+        }
+    }
     // Capture how the per-user IP limit changed, so the in-memory ip_tracker
     // can be synced (set or removed) after the config is persisted.
     let max_unique_ips_change = match body.max_unique_ips {
@@ -287,6 +331,9 @@ pub(super) async fn patch_user(
     }
     if touches_user_data_quota {
         touched_sections.push(AccessSection::UserDataQuota);
+    }
+    if touches_user_rate_limits {
+        touched_sections.push(AccessSection::UserRateLimits);
     }
     if touches_user_max_unique_ips {
         touched_sections.push(AccessSection::UserMaxUniqueIps);
@@ -355,6 +402,7 @@ pub(super) async fn rotate_secret(
         AccessSection::UserMaxTcpConns,
         AccessSection::UserExpirations,
         AccessSection::UserDataQuota,
+        AccessSection::UserRateLimits,
         AccessSection::UserMaxUniqueIps,
     ];
     let revision =
@@ -414,6 +462,7 @@ pub(super) async fn delete_user(
     cfg.access.user_max_tcp_conns.remove(user);
     cfg.access.user_expirations.remove(user);
     cfg.access.user_data_quota.remove(user);
+    cfg.access.user_rate_limits.remove(user);
     cfg.access.user_max_unique_ips.remove(user);
 
     cfg.validate()
@@ -424,6 +473,7 @@ pub(super) async fn delete_user(
         AccessSection::UserMaxTcpConns,
         AccessSection::UserExpirations,
         AccessSection::UserDataQuota,
+        AccessSection::UserRateLimits,
         AccessSection::UserMaxUniqueIps,
     ];
     let revision =
@@ -485,6 +535,18 @@ pub(super) async fn users_from_config(
                 .get(&username)
                 .map(chrono::DateTime::<chrono::Utc>::to_rfc3339),
             data_quota_bytes: cfg.access.user_data_quota.get(&username).copied(),
+            rate_limit_up_bps: cfg
+                .access
+                .user_rate_limits
+                .get(&username)
+                .map(|limit| limit.up_bps)
+                .filter(|limit| *limit > 0),
+            rate_limit_down_bps: cfg
+                .access
+                .user_rate_limits
+                .get(&username)
+                .map(|limit| limit.down_bps)
+                .filter(|limit| *limit > 0),
             max_unique_ips: cfg
                 .access
                 .user_max_unique_ips
@@ -756,6 +818,34 @@ mod tests {
             .expect("alice must be present");
         assert!(!alice.in_runtime);
         assert_eq!(alice.max_tcp_conns, None);
+    }
+
+    #[tokio::test]
+    async fn users_from_config_reports_user_rate_limits() {
+        let mut cfg = ProxyConfig::default();
+        cfg.access.users.insert(
+            "alice".to_string(),
+            "0123456789abcdef0123456789abcdef".to_string(),
+        );
+        cfg.access.user_rate_limits.insert(
+            "alice".to_string(),
+            RateLimitBps {
+                up_bps: 1024,
+                down_bps: 0,
+            },
+        );
+
+        let stats = Stats::new();
+        let tracker = UserIpTracker::new();
+
+        let users = users_from_config(&cfg, &stats, &tracker, None, None, None).await;
+        let alice = users
+            .iter()
+            .find(|entry| entry.username == "alice")
+            .expect("alice must be present");
+
+        assert_eq!(alice.rate_limit_up_bps, Some(1024));
+        assert_eq!(alice.rate_limit_down_bps, None);
     }
 
     #[tokio::test]

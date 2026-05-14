@@ -7,7 +7,7 @@ use hyper::header::IF_MATCH;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::config::ProxyConfig;
+use crate::config::{ProxyConfig, RateLimitBps};
 
 use super::model::ApiFailure;
 
@@ -18,6 +18,7 @@ pub(super) enum AccessSection {
     UserMaxTcpConns,
     UserExpirations,
     UserDataQuota,
+    UserRateLimits,
     UserMaxUniqueIps,
 }
 
@@ -29,6 +30,7 @@ impl AccessSection {
             Self::UserMaxTcpConns => "access.user_max_tcp_conns",
             Self::UserExpirations => "access.user_expirations",
             Self::UserDataQuota => "access.user_data_quota",
+            Self::UserRateLimits => "access.user_rate_limits",
             Self::UserMaxUniqueIps => "access.user_max_unique_ips",
         }
     }
@@ -169,6 +171,15 @@ fn render_access_section(cfg: &ProxyConfig, section: AccessSection) -> Result<St
                 .collect();
             serialize_table_body(&rows)?
         }
+        AccessSection::UserRateLimits => {
+            let rows: BTreeMap<String, RateLimitBps> = cfg
+                .access
+                .user_rate_limits
+                .iter()
+                .map(|(key, value)| (key.clone(), *value))
+                .collect();
+            serialize_rate_limit_body(&rows)?
+        }
         AccessSection::UserMaxUniqueIps => {
             let rows: BTreeMap<String, usize> = cfg
                 .access
@@ -197,6 +208,7 @@ fn access_section_is_empty(cfg: &ProxyConfig, section: AccessSection) -> bool {
         AccessSection::UserMaxTcpConns => cfg.access.user_max_tcp_conns.is_empty(),
         AccessSection::UserExpirations => cfg.access.user_expirations.is_empty(),
         AccessSection::UserDataQuota => cfg.access.user_data_quota.is_empty(),
+        AccessSection::UserRateLimits => cfg.access.user_rate_limits.is_empty(),
         AccessSection::UserMaxUniqueIps => cfg.access.user_max_unique_ips.is_empty(),
     }
 }
@@ -204,6 +216,28 @@ fn access_section_is_empty(cfg: &ProxyConfig, section: AccessSection) -> bool {
 fn serialize_table_body<T: Serialize>(value: &T) -> Result<String, ApiFailure> {
     toml::to_string(value)
         .map_err(|e| ApiFailure::internal(format!("failed to serialize access section: {}", e)))
+}
+
+fn serialize_rate_limit_body(rows: &BTreeMap<String, RateLimitBps>) -> Result<String, ApiFailure> {
+    let mut out = String::new();
+    for (key, value) in rows {
+        let key = serialize_toml_key(key)?;
+        out.push_str(&format!(
+            "{key} = {{ up_bps = {}, down_bps = {} }}\n",
+            value.up_bps, value.down_bps
+        ));
+    }
+    Ok(out)
+}
+
+fn serialize_toml_key(key: &str) -> Result<String, ApiFailure> {
+    let mut row = BTreeMap::new();
+    row.insert(key.to_string(), 0_u8);
+    let rendered = serialize_table_body(&row)?;
+    rendered
+        .split_once(" = ")
+        .map(|(key, _)| key.to_string())
+        .ok_or_else(|| ApiFailure::internal("failed to serialize TOML key"))
 }
 
 fn upsert_toml_table(source: &str, table_name: &str, replacement: &str) -> String {
@@ -284,4 +318,27 @@ fn write_atomic_sync(path: &Path, contents: &str) -> std::io::Result<()> {
         let _ = std::fs::remove_file(&tmp_path);
     }
     write_result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_user_rate_limits_section() {
+        let mut cfg = ProxyConfig::default();
+        cfg.access.user_rate_limits.insert(
+            "alice".to_string(),
+            RateLimitBps {
+                up_bps: 1024,
+                down_bps: 2048,
+            },
+        );
+
+        let rendered = render_access_section(&cfg, AccessSection::UserRateLimits)
+            .expect("section must render");
+
+        assert!(rendered.starts_with("[access.user_rate_limits]\n"));
+        assert!(rendered.contains("alice = { up_bps = 1024, down_bps = 2048 }"));
+    }
 }

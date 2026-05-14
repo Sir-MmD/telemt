@@ -114,7 +114,9 @@ mod tests {
             "secret": "00112233445566778899aabbccddeeff",
             "max_tcp_conns": 0,
             "max_unique_ips": null,
-            "data_quota_bytes": 1024
+            "data_quota_bytes": 1024,
+            "rate_limit_up_bps": 4096,
+            "rate_limit_down_bps": null
         }"#;
         let req: PatchUserRequest = serde_json::from_str(raw).expect("valid json");
         assert_eq!(
@@ -124,6 +126,8 @@ mod tests {
         assert!(matches!(req.max_tcp_conns, Patch::Set(0)));
         assert!(matches!(req.max_unique_ips, Patch::Remove));
         assert!(matches!(req.data_quota_bytes, Patch::Set(1024)));
+        assert!(matches!(req.rate_limit_up_bps, Patch::Set(4096)));
+        assert!(matches!(req.rate_limit_down_bps, Patch::Remove));
         assert!(matches!(req.expiration_rfc3339, Patch::Unchanged));
         assert!(matches!(req.user_ad_tag, Patch::Unchanged));
     }

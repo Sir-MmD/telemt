@@ -254,6 +254,19 @@ docker compose down
 > - `docker-compose.yml` maps `./config.toml` to `/app/config.toml` (read-only)
 > - By default it publishes `443:443` and runs with dropped capabilities (only `NET_BIND_SERVICE` is added)
 > - If you really need host networking (usually only for some IPv6 setups) uncomment `network_mode: host`
+> - If you enable mutating Control API endpoints, mount a writable config directory instead of a single `config.toml` file. Telemt persists config changes with atomic `tmp + rename` writes, and a single bind-mounted file can fail with `Device or resource busy`.
+
+Example writable config mount for Control API mutations:
+```yaml
+services:
+  telemt:
+    working_dir: /run/telemt
+    volumes:
+      - ./config:/etc/telemt:rw
+    tmpfs:
+      - /run/telemt:rw,mode=1777,size=4m
+    command: /usr/local/bin/telemt /etc/telemt/config.toml
+```
 
 **Run without Compose**
 ```bash
