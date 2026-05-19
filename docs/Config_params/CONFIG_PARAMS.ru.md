@@ -98,7 +98,7 @@
 | [`middle_proxy_warm_standby`](#middle_proxy_warm_standby) | `usize` | `16` |
 | [`me_init_retry_attempts`](#me_init_retry_attempts) | `u32` | `0` |
 | [`me2dc_fallback`](#me2dc_fallback) | `bool` | `true` |
-| [`me2dc_fast`](#me2dc_fast) | `bool` | `false` |
+| [`me2dc_fast`](#me2dc_fast) | `bool` | `true` |
 | [`me_keepalive_enabled`](#me_keepalive_enabled) | `bool` | `true` |
 | [`me_keepalive_interval_secs`](#me_keepalive_interval_secs) | `u64` | `8` |
 | [`me_keepalive_jitter_secs`](#me_keepalive_jitter_secs) | `u64` | `2` |
@@ -392,7 +392,7 @@
     ```
 ## me2dc_fallback
   - **Ограничения / валидация**: `bool`.
-  - **Описание**: Перейти из режима ME в режим прямого соединения (DC) в случае сбоя запуска ME.
+  - **Описание**: Разрешает fallback на прямой DC, когда ME недоступен. При `use_middle_proxy = true` запуск сначала открывает маршрутизацию через Direct-DC, а новые сеансы переводятся на ME после подтверждения готовности ME.
   - **Пример**:
 
     ```toml
@@ -401,14 +401,14 @@
     ```
 ## me2dc_fast
   - **Ограничения / валидация**: `bool`. Используется только, когда `use_middle_proxy = true` и `me2dc_fallback = true`.
-  - **Описание**: Режим для быстрого перехода между режимами ME->DC для новых сеансов.
+  - **Описание**: Быстрый fallback ME->Direct для новых сеансов после того, как ME уже был готов хотя бы один раз. Начальный direct-first fallback управляется `me2dc_fallback`.
   - **Пример**:
 
     ```toml
     [general]
     use_middle_proxy = true
     me2dc_fallback = true
-    me2dc_fast = false
+    me2dc_fast = true
     ```
 ## me_keepalive_enabled
   - **Ограничения / валидация**: `bool`.
@@ -2358,6 +2358,7 @@
 | [`mask`](#mask) | `bool` | `true` |
 | [`mask_host`](#mask_host) | `String` | — |
 | [`mask_port`](#mask_port) | `u16` | `443` |
+| [`exclusive_mask`](#exclusive_mask) | `Map<String,String>` | `{}` |
 | [`mask_unix_sock`](#mask_unix_sock) | `String` | — |
 | [`fake_cert_len`](#fake_cert_len) | `usize` | `2048` |
 | [`tls_emulation`](#tls_emulation) | `bool` | `true` |
@@ -2463,6 +2464,18 @@
     ```toml
     [censorship]
     mask_port = 443
+    ```
+## exclusive_mask
+  - **Ограничения / валидация**: TOML map. Ключи должны быть доменами SNI. Значения должны иметь формат `host:port`, где `port > 0`; IPv6 literals должны быть в квадратных скобках.
+  - **Описание**: Per-SNI TCP targets для fallback-трафика. Если SNI в TLS ClientHello совпадает с ключом, Telemt проксирует это неаутентифицированное соединение на указанный target. Остальной fallback-трафик продолжает использовать существующий `mask_host`/`mask_port` или SNI-aware default masking behavior.
+  - **Пример**:
+
+    ```toml
+    [censorship]
+    tls_domains = ["petrovich.ru", "bsi.bund.de", "telekom.com"]
+
+    [censorship.exclusive_mask]
+    "bsi.bund.de" = "127.0.0.1:443"
     ```
 ## mask_unix_sock
   - **Ограничения / валидация**: `String` (optional).

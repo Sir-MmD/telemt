@@ -98,7 +98,7 @@ This document lists all configuration keys accepted by `config.toml`.
 | [`middle_proxy_warm_standby`](#middle_proxy_warm_standby) | `usize` | `16` |
 | [`me_init_retry_attempts`](#me_init_retry_attempts) | `u32` | `0` |
 | [`me2dc_fallback`](#me2dc_fallback) | `bool` | `true` |
-| [`me2dc_fast`](#me2dc_fast) | `bool` | `false` |
+| [`me2dc_fast`](#me2dc_fast) | `bool` | `true` |
 | [`me_keepalive_enabled`](#me_keepalive_enabled) | `bool` | `true` |
 | [`me_keepalive_interval_secs`](#me_keepalive_interval_secs) | `u64` | `8` |
 | [`me_keepalive_jitter_secs`](#me_keepalive_jitter_secs) | `u64` | `2` |
@@ -392,7 +392,7 @@ This document lists all configuration keys accepted by `config.toml`.
     ```
 ## me2dc_fallback
   - **Constraints / validation**: `bool`.
-  - **Description**: Allows fallback from ME mode to direct DC when ME startup fails.
+  - **Description**: Allows Direct-DC fallback when ME is unavailable. With `use_middle_proxy = true`, startup opens Direct-DC routing first and moves new sessions to ME after ME readiness is observed.
   - **Example**:
 
     ```toml
@@ -401,14 +401,14 @@ This document lists all configuration keys accepted by `config.toml`.
     ```
 ## me2dc_fast
   - **Constraints / validation**: `bool`. Active only when `use_middle_proxy = true` and `me2dc_fallback = true`.
-  - **Description**: Fast ME->Direct fallback mode for new sessions.
+  - **Description**: Fast ME->Direct fallback mode for new sessions after ME was ready at least once. Initial direct-first startup fallback is controlled by `me2dc_fallback`.
   - **Example**:
 
     ```toml
     [general]
     use_middle_proxy = true
     me2dc_fallback = true
-    me2dc_fast = false
+    me2dc_fast = true
     ```
 ## me_keepalive_enabled
   - **Constraints / validation**: `bool`.
@@ -2352,6 +2352,7 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
 | [`mask`](#mask) | `bool` | `true` |
 | [`mask_host`](#mask_host) | `String` | — |
 | [`mask_port`](#mask_port) | `u16` | `443` |
+| [`exclusive_mask`](#exclusive_mask) | `Map<String,String>` | `{}` |
 | [`mask_unix_sock`](#mask_unix_sock) | `String` | — |
 | [`fake_cert_len`](#fake_cert_len) | `usize` | `2048` |
 | [`tls_emulation`](#tls_emulation) | `bool` | `true` |
@@ -2458,6 +2459,18 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
     ```toml
     [censorship]
     mask_port = 443
+    ```
+## exclusive_mask
+  - **Constraints / validation**: TOML map. Keys must be SNI domain names. Values must be `host:port` with `port > 0`; IPv6 literals must be bracketed.
+  - **Description**: Per-SNI TCP mask targets for fallback traffic. When a TLS ClientHello SNI matches a key, Telemt relays that unauthenticated connection to the mapped target. Other fallback traffic keeps using the existing `mask_host`/`mask_port` or SNI-aware default masking behavior.
+  - **Example**:
+
+    ```toml
+    [censorship]
+    tls_domains = ["petrovich.ru", "bsi.bund.de", "telekom.com"]
+
+    [censorship.exclusive_mask]
+    "bsi.bund.de" = "127.0.0.1:443"
     ```
 ## mask_unix_sock
   - **Constraints / validation**: `String` (optional).

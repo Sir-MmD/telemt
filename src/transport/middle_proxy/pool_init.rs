@@ -19,12 +19,14 @@ impl MePool {
             .me_reconnect_max_concurrent_per_dc
             .max(1) as usize;
         let ks = self.key_selector().await;
+        let me_servers = self.proxy_map_v4.read().await.len();
+        let secret_len = self.proxy_secret.read().await.secret.len();
         info!(
-            me_servers = self.proxy_map_v4.read().await.len(),
+            me_servers,
             pool_size,
             connect_concurrency,
             key_selector = format_args!("0x{ks:08x}"),
-            secret_len = self.proxy_secret.read().await.secret.len(),
+            secret_len,
             "Initializing ME pool"
         );
 

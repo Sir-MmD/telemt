@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 #[cfg(unix)]
 use tokio::net::UnixListener;
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::{RwLock, Semaphore, watch};
 use tracing::{debug, error, info, warn};
 
 use crate::config::{ProxyConfig, RstOnCloseMode};
@@ -63,6 +63,7 @@ pub(crate) async fn bind_listeners(
     buffer_pool: Arc<BufferPool>,
     rng: Arc<SecureRandom>,
     me_pool: Option<Arc<MePool>>,
+    me_pool_runtime: Arc<RwLock<Option<Arc<MePool>>>>,
     route_runtime: Arc<RouteRuntimeController>,
     tls_cache: Option<Arc<TlsFrontCache>>,
     ip_tracker: Arc<UserIpTracker>,
@@ -236,6 +237,7 @@ pub(crate) async fn bind_listeners(
         let buffer_pool = buffer_pool.clone();
         let rng = rng.clone();
         let me_pool = me_pool.clone();
+        let me_pool_runtime = me_pool_runtime.clone();
         let route_runtime = route_runtime.clone();
         let tls_cache = tls_cache.clone();
         let ip_tracker = ip_tracker.clone();
@@ -298,6 +300,7 @@ pub(crate) async fn bind_listeners(
                         let buffer_pool = buffer_pool.clone();
                         let rng = rng.clone();
                         let me_pool = me_pool.clone();
+                        let me_pool_runtime = me_pool_runtime.clone();
                         let route_runtime = route_runtime.clone();
                         let tls_cache = tls_cache.clone();
                         let ip_tracker = ip_tracker.clone();
@@ -307,7 +310,8 @@ pub(crate) async fn bind_listeners(
 
                         tokio::spawn(async move {
                             let _permit = permit;
-                            if let Err(e) = crate::proxy::client::handle_client_stream_with_shared(
+                            if let Err(e) =
+                                crate::proxy::client::handle_client_stream_with_shared_and_pool_runtime(
                                 stream,
                                 fake_peer,
                                 config,
@@ -317,6 +321,7 @@ pub(crate) async fn bind_listeners(
                                 buffer_pool,
                                 rng,
                                 me_pool,
+                                Some(me_pool_runtime),
                                 route_runtime,
                                 tls_cache,
                                 ip_tracker,
@@ -367,6 +372,7 @@ pub(crate) fn spawn_tcp_accept_loops(
     buffer_pool: Arc<BufferPool>,
     rng: Arc<SecureRandom>,
     me_pool: Option<Arc<MePool>>,
+    me_pool_runtime: Arc<RwLock<Option<Arc<MePool>>>>,
     route_runtime: Arc<RouteRuntimeController>,
     tls_cache: Option<Arc<TlsFrontCache>>,
     ip_tracker: Arc<UserIpTracker>,
@@ -383,6 +389,7 @@ pub(crate) fn spawn_tcp_accept_loops(
         let buffer_pool = buffer_pool.clone();
         let rng = rng.clone();
         let me_pool = me_pool.clone();
+        let me_pool_runtime = me_pool_runtime.clone();
         let route_runtime = route_runtime.clone();
         let tls_cache = tls_cache.clone();
         let ip_tracker = ip_tracker.clone();
@@ -449,6 +456,7 @@ pub(crate) fn spawn_tcp_accept_loops(
                         let buffer_pool = buffer_pool.clone();
                         let rng = rng.clone();
                         let me_pool = me_pool.clone();
+                        let me_pool_runtime = me_pool_runtime.clone();
                         let route_runtime = route_runtime.clone();
                         let tls_cache = tls_cache.clone();
                         let ip_tracker = ip_tracker.clone();
@@ -470,6 +478,7 @@ pub(crate) fn spawn_tcp_accept_loops(
                                 buffer_pool,
                                 rng,
                                 me_pool,
+                                Some(me_pool_runtime),
                                 route_runtime,
                                 tls_cache,
                                 ip_tracker,

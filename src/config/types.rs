@@ -1719,6 +1719,10 @@ pub struct AntiCensorshipConfig {
     #[serde(default = "default_mask_port")]
     pub mask_port: u16,
 
+    /// Per-SNI TCP mask targets. Keys are SNI domains, values are `host:port`.
+    #[serde(default)]
+    pub exclusive_mask: HashMap<String, String>,
+
     #[serde(default)]
     pub mask_unix_sock: Option<String>,
 
@@ -1842,6 +1846,7 @@ impl Default for AntiCensorshipConfig {
             mask: default_true(),
             mask_host: None,
             mask_port: default_mask_port(),
+            exclusive_mask: HashMap::new(),
             mask_unix_sock: None,
             fake_cert_len: default_fake_cert_len(),
             tls_emulation: true,

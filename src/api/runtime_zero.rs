@@ -178,6 +178,7 @@ pub(super) async fn build_runtime_gates_data(
     cfg: &ProxyConfig,
 ) -> RuntimeGatesData {
     let startup_summary = build_runtime_startup_summary(shared).await;
+    let startup_snapshot = shared.startup_tracker.snapshot().await;
     let route_state = shared.route_runtime.snapshot();
     let route_mode = route_state.mode.as_str();
     let fast_fallback_enabled =
@@ -191,7 +192,9 @@ pub(super) async fn build_runtime_gates_data(
         None
     };
     let reroute_reason = if reroute_active {
-        if fast_fallback_enabled {
+        if startup_snapshot.me.status.as_str() != "ready" {
+            Some("startup_direct_fallback")
+        } else if fast_fallback_enabled {
             Some("fast_not_ready_fallback")
         } else {
             Some("strict_grace_fallback")

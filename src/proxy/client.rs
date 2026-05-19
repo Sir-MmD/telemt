@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::{debug, warn};
 
@@ -452,7 +453,50 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub async fn handle_client_stream_with_shared<S>(
+    stream: S,
+    peer: SocketAddr,
+    config: Arc<ProxyConfig>,
+    stats: Arc<Stats>,
+    upstream_manager: Arc<UpstreamManager>,
+    replay_checker: Arc<ReplayChecker>,
+    buffer_pool: Arc<BufferPool>,
+    rng: Arc<SecureRandom>,
+    me_pool: Option<Arc<MePool>>,
+    route_runtime: Arc<RouteRuntimeController>,
+    tls_cache: Option<Arc<TlsFrontCache>>,
+    ip_tracker: Arc<UserIpTracker>,
+    beobachten: Arc<BeobachtenStore>,
+    shared: Arc<ProxySharedState>,
+    proxy_protocol_enabled: bool,
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    handle_client_stream_with_shared_and_pool_runtime(
+        stream,
+        peer,
+        config,
+        stats,
+        upstream_manager,
+        replay_checker,
+        buffer_pool,
+        rng,
+        me_pool,
+        None,
+        route_runtime,
+        tls_cache,
+        ip_tracker,
+        beobachten,
+        shared,
+        proxy_protocol_enabled,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_client_stream_with_shared_and_pool_runtime<S>(
     mut stream: S,
     peer: SocketAddr,
     config: Arc<ProxyConfig>,
@@ -462,6 +506,7 @@ pub async fn handle_client_stream_with_shared<S>(
     buffer_pool: Arc<BufferPool>,
     rng: Arc<SecureRandom>,
     me_pool: Option<Arc<MePool>>,
+    me_pool_runtime: Option<Arc<RwLock<Option<Arc<MePool>>>>>,
     route_runtime: Arc<RouteRuntimeController>,
     tls_cache: Option<Arc<TlsFrontCache>>,
     ip_tracker: Arc<UserIpTracker>,
@@ -731,6 +776,7 @@ where
                 RunningClientHandler::handle_authenticated_static_with_shared(
                     crypto_reader, crypto_writer, success,
                     upstream_manager, stats, config, buffer_pool, rng, me_pool,
+                    me_pool_runtime,
                     route_runtime.clone(),
                     local_addr, real_peer, ip_tracker.clone(),
                     shared.clone(),
@@ -791,6 +837,7 @@ where
                     buffer_pool,
                     rng,
                     me_pool,
+                    me_pool_runtime,
                     route_runtime.clone(),
                     local_addr,
                     real_peer,
@@ -846,6 +893,7 @@ pub struct RunningClientHandler {
     buffer_pool: Arc<BufferPool>,
     rng: Arc<SecureRandom>,
     me_pool: Option<Arc<MePool>>,
+    me_pool_runtime: Option<Arc<RwLock<Option<Arc<MePool>>>>>,
     route_runtime: Arc<RouteRuntimeController>,
     tls_cache: Option<Arc<TlsFrontCache>>,
     ip_tracker: Arc<UserIpTracker>,
@@ -891,6 +939,7 @@ impl ClientHandler {
             buffer_pool,
             rng,
             me_pool,
+            None,
             route_runtime,
             tls_cache,
             ip_tracker,
@@ -915,6 +964,7 @@ impl ClientHandler {
         buffer_pool: Arc<BufferPool>,
         rng: Arc<SecureRandom>,
         me_pool: Option<Arc<MePool>>,
+        me_pool_runtime: Option<Arc<RwLock<Option<Arc<MePool>>>>>,
         route_runtime: Arc<RouteRuntimeController>,
         tls_cache: Option<Arc<TlsFrontCache>>,
         ip_tracker: Arc<UserIpTracker>,
@@ -938,6 +988,7 @@ impl ClientHandler {
             buffer_pool,
             rng,
             me_pool,
+            me_pool_runtime,
             route_runtime,
             tls_cache,
             ip_tracker,
@@ -1345,6 +1396,7 @@ impl RunningClientHandler {
                 buffer_pool,
                 self.rng,
                 self.me_pool,
+                self.me_pool_runtime,
                 self.route_runtime.clone(),
                 local_addr,
                 peer,
@@ -1429,6 +1481,7 @@ impl RunningClientHandler {
                 buffer_pool,
                 self.rng,
                 self.me_pool,
+                self.me_pool_runtime,
                 self.route_runtime.clone(),
                 local_addr,
                 peer,
@@ -1472,6 +1525,7 @@ impl RunningClientHandler {
             buffer_pool,
             rng,
             me_pool,
+            None,
             route_runtime,
             local_addr,
             peer_addr,
@@ -1491,6 +1545,7 @@ impl RunningClientHandler {
         buffer_pool: Arc<BufferPool>,
         rng: Arc<SecureRandom>,
         me_pool: Option<Arc<MePool>>,
+        me_pool_runtime: Option<Arc<RwLock<Option<Arc<MePool>>>>>,
         route_runtime: Arc<RouteRuntimeController>,
         local_addr: SocketAddr,
         peer_addr: SocketAddr,
@@ -1521,15 +1576,29 @@ impl RunningClientHandler {
 
         let route_snapshot = route_runtime.snapshot();
         let session_id = rng.u64();
-        let relay_result = if config.general.use_middle_proxy
+        let selected_me_pool = if config.general.use_middle_proxy
             && matches!(route_snapshot.mode, RelayRouteMode::Middle)
         {
             if let Some(ref pool) = me_pool {
+                Some(pool.clone())
+            } else if let Some(pool_runtime) = me_pool_runtime.as_ref() {
+                pool_runtime.read().await.clone()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let relay_result = if config.general.use_middle_proxy
+            && matches!(route_snapshot.mode, RelayRouteMode::Middle)
+        {
+            if let Some(pool) = selected_me_pool {
                 handle_via_middle_proxy(
                     client_reader,
                     client_writer,
                     success,
-                    pool.clone(),
+                    pool,
                     stats.clone(),
                     config,
                     buffer_pool,

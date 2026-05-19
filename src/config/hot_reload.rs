@@ -617,6 +617,7 @@ fn warn_non_hot_changes(old: &ProxyConfig, new: &ProxyConfig, non_hot_changed: b
         || old.censorship.mask != new.censorship.mask
         || old.censorship.mask_host != new.censorship.mask_host
         || old.censorship.mask_port != new.censorship.mask_port
+        || old.censorship.exclusive_mask != new.censorship.exclusive_mask
         || old.censorship.mask_unix_sock != new.censorship.mask_unix_sock
         || old.censorship.fake_cert_len != new.censorship.fake_cert_len
         || old.censorship.tls_emulation != new.censorship.tls_emulation

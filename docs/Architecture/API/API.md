@@ -307,7 +307,7 @@ An empty request body is accepted and generates a new secret automatically.
 | `route_mode` | `string` | Current route mode label from route runtime controller. |
 | `reroute_active` | `bool` | `true` when ME fallback currently routes new sessions to Direct-DC. |
 | `reroute_to_direct_at_epoch_secs` | `u64?` | Unix timestamp when current direct reroute began. |
-| `reroute_reason` | `string?` | `fast_not_ready_fallback` or `strict_grace_fallback` while reroute is active. |
+| `reroute_reason` | `string?` | `startup_direct_fallback`, `fast_not_ready_fallback`, or `strict_grace_fallback` while reroute is active. |
 | `startup_status` | `string` | Startup status (`pending`, `initializing`, `ready`, `failed`, `skipped`). |
 | `startup_stage` | `string` | Current startup stage identifier. |
 | `startup_progress_pct` | `f64` | Startup progress percentage (`0..100`). |
@@ -1286,12 +1286,12 @@ Additional runtime endpoint behavior:
 ## ME Fallback Behavior Exposed Via API
 
 When `general.use_middle_proxy=true` and `general.me2dc_fallback=true`:
-- Startup does not block on full ME pool readiness; initialization can continue in background.
+- Startup opens Direct-DC routing first, then initializes ME in background and switches new sessions to Middle mode after ME readiness is observed.
 - Runtime initialization payload can expose ME stage `background_init` until pool becomes ready.
 - Admission/routing decision uses two readiness grace windows for "ME not ready" periods:
-  `80s` before first-ever readiness is observed (startup grace),
+  direct startup fallback before first-ever readiness is observed,
   `6s` after readiness has been observed at least once (runtime failover timeout).
-- While in fallback window breach, new sessions are routed via Direct-DC; when ME becomes ready, routing returns to Middle mode for new sessions.
+- While fallback is active, new sessions are routed via Direct-DC; when ME becomes ready, routing returns to Middle mode. Direct sessions affected by the cutover are closed with the existing staggered delay so clients reconnect through the current route.
 
 ## Serialization Rules
 

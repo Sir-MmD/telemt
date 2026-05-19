@@ -36,10 +36,10 @@ use crate::network::probe::{decide_network_capabilities, log_probe_result, run_p
 use crate::proxy::route_mode::{RelayRouteMode, RouteRuntimeController};
 use crate::proxy::shared_state::ProxySharedState;
 use crate::startup::{
-    COMPONENT_API_BOOTSTRAP, COMPONENT_CONFIG_LOAD, COMPONENT_ME_POOL_CONSTRUCT,
-    COMPONENT_ME_POOL_INIT_STAGE1, COMPONENT_ME_PROXY_CONFIG_V4, COMPONENT_ME_PROXY_CONFIG_V6,
-    COMPONENT_ME_SECRET_FETCH, COMPONENT_NETWORK_PROBE, COMPONENT_TRACING_INIT, StartupMeStatus,
-    StartupTracker,
+    COMPONENT_API_BOOTSTRAP, COMPONENT_CONFIG_LOAD, COMPONENT_DC_CONNECTIVITY_PING,
+    COMPONENT_ME_CONNECTIVITY_PING, COMPONENT_ME_POOL_CONSTRUCT, COMPONENT_ME_POOL_INIT_STAGE1,
+    COMPONENT_ME_PROXY_CONFIG_V4, COMPONENT_ME_PROXY_CONFIG_V6, COMPONENT_ME_SECRET_FETCH,
+    COMPONENT_NETWORK_PROBE, COMPONENT_TRACING_INIT, StartupMeStatus, StartupTracker,
 };
 use crate::stats::beobachten::BeobachtenStore;
 use crate::stats::telemetry::TelemetryPolicy;
@@ -461,12 +461,14 @@ async fn run_telemt_core(
 
     let (api_config_tx, api_config_rx) = watch::channel(Arc::new(config.clone()));
     let (detected_ips_tx, detected_ips_rx) = watch::channel((None::<IpAddr>, None::<IpAddr>));
-    let initial_admission_open = !config.general.use_middle_proxy;
+    let initial_direct_first =
+        config.general.use_middle_proxy && config.general.me2dc_fallback;
+    let initial_admission_open = !config.general.use_middle_proxy || initial_direct_first;
     let (admission_tx, admission_rx) = watch::channel(initial_admission_open);
-    let initial_route_mode = if config.general.use_middle_proxy {
-        RelayRouteMode::Middle
-    } else {
+    let initial_route_mode = if !config.general.use_middle_proxy || initial_direct_first {
         RelayRouteMode::Direct
+    } else {
+        RelayRouteMode::Middle
     };
     let route_runtime = Arc::new(RouteRuntimeController::new(initial_route_mode));
     let api_me_pool = Arc::new(RwLock::new(None::<Arc<MePool>>));
@@ -602,8 +604,9 @@ async fn run_telemt_core(
     let me_init_retry_attempts = config.general.me_init_retry_attempts;
     if use_middle_proxy && !decision.ipv4_me && !decision.ipv6_me {
         if me2dc_fallback {
-            warn!("No usable IP family for Middle Proxy detected; falling back to direct DC");
-            use_middle_proxy = false;
+            warn!(
+                "No usable IP family for Middle Proxy detected; Direct-DC startup fallback is active while ME init retries continue"
+            );
         } else {
             warn!(
                 "No usable IP family for Middle Proxy detected; me2dc_fallback=false, ME init retries stay active"
@@ -665,23 +668,32 @@ async fn run_telemt_core(
     }
 
     let (me_ready_tx, me_ready_rx) = watch::channel(0_u64);
+    let direct_first_startup = use_middle_proxy && me2dc_fallback;
 
-    let me_pool: Option<Arc<MePool>> = me_startup::initialize_me_pool(
-        use_middle_proxy,
-        &config,
-        &decision,
-        &probe,
-        &startup_tracker,
-        upstream_manager.clone(),
-        rng.clone(),
-        stats.clone(),
-        api_me_pool.clone(),
-        me_ready_tx.clone(),
-    )
-    .await;
+    let me_pool: Option<Arc<MePool>> = if direct_first_startup {
+        None
+    } else {
+        me_startup::initialize_me_pool(
+            use_middle_proxy,
+            &config,
+            &decision,
+            &probe,
+            &startup_tracker,
+            upstream_manager.clone(),
+            rng.clone(),
+            stats.clone(),
+            api_me_pool.clone(),
+            me_ready_tx.clone(),
+        )
+        .await
+    };
 
     // If ME failed to initialize, force direct-only mode.
-    if me_pool.is_some() {
+    if direct_first_startup {
+        startup_tracker.set_transport_mode("direct").await;
+        startup_tracker.set_degraded(true).await;
+        info!("Transport: Direct DC startup fallback active; Middle-End bootstrap continues in background");
+    } else if me_pool.is_some() {
         startup_tracker.set_transport_mode("middle_proxy").await;
         startup_tracker.set_degraded(false).await;
         info!("Transport: Middle-End Proxy - all DC-over-RPC");
@@ -719,18 +731,33 @@ async fn run_telemt_core(
         config.access.cidr_rate_limits.clone(),
     );
 
-    connectivity::run_startup_connectivity(
-        &config,
-        &me_pool,
-        rng.clone(),
-        &startup_tracker,
-        upstream_manager.clone(),
-        prefer_ipv6,
-        &decision,
-        process_started_at,
-        api_me_pool.clone(),
-    )
-    .await;
+    if direct_first_startup {
+        startup_tracker
+            .skip_component(
+                COMPONENT_ME_CONNECTIVITY_PING,
+                Some("deferred by direct-first startup".to_string()),
+            )
+            .await;
+        startup_tracker
+            .skip_component(
+                COMPONENT_DC_CONNECTIVITY_PING,
+                Some("background health checks active".to_string()),
+            )
+            .await;
+    } else {
+        connectivity::run_startup_connectivity(
+            &config,
+            &me_pool,
+            rng.clone(),
+            &startup_tracker,
+            upstream_manager.clone(),
+            prefer_ipv6,
+            &decision,
+            process_started_at,
+            api_me_pool.clone(),
+        )
+        .await;
+    }
 
     let runtime_watches = runtime_tasks::spawn_runtime_tasks(
         &config,
@@ -758,9 +785,70 @@ async fn run_telemt_core(
     let detected_ip_v4 = runtime_watches.detected_ip_v4;
     let detected_ip_v6 = runtime_watches.detected_ip_v6;
 
+    if direct_first_startup {
+        let config_bg = config.clone();
+        let decision_bg = decision.clone();
+        let probe_bg = probe.clone();
+        let startup_tracker_bg = startup_tracker.clone();
+        let upstream_manager_bg = upstream_manager.clone();
+        let rng_bg = rng.clone();
+        let stats_bg = stats.clone();
+        let api_me_pool_bg = api_me_pool.clone();
+        let me_ready_tx_bg = me_ready_tx.clone();
+        let config_rx_bg = config_rx.clone();
+        tokio::spawn(async move {
+            let mut bootstrap_attempt: u32 = 0;
+            loop {
+                bootstrap_attempt = bootstrap_attempt.saturating_add(1);
+                let pool = me_startup::initialize_me_pool(
+                    true,
+                    config_bg.as_ref(),
+                    &decision_bg,
+                    &probe_bg,
+                    &startup_tracker_bg,
+                    upstream_manager_bg.clone(),
+                    rng_bg.clone(),
+                    stats_bg.clone(),
+                    api_me_pool_bg.clone(),
+                    me_ready_tx_bg.clone(),
+                )
+                .await;
+                if let Some(pool) = pool {
+                    runtime_tasks::spawn_middle_proxy_runtime_tasks(
+                        config_bg.as_ref(),
+                        config_rx_bg,
+                        pool,
+                        rng_bg,
+                        me_ready_tx_bg,
+                    );
+                    break;
+                }
+                if me_init_retry_attempts > 0 && bootstrap_attempt >= me_init_retry_attempts {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        });
+
+        let startup_tracker_ready = startup_tracker.clone();
+        let api_me_pool_ready = api_me_pool.clone();
+        let mut me_ready_rx_transport = me_ready_tx.subscribe();
+        tokio::spawn(async move {
+            if me_ready_rx_transport.changed().await.is_ok() {
+                if let Some(pool) = api_me_pool_ready.read().await.as_ref() {
+                    pool.set_runtime_ready(true);
+                }
+                startup_tracker_ready.set_transport_mode("middle_proxy").await;
+                startup_tracker_ready.set_degraded(false).await;
+                info!("Transport: Middle-End Proxy restored for new sessions");
+            }
+        });
+    }
+
     admission::configure_admission_gate(
         &config,
         me_pool.clone(),
+        api_me_pool.clone(),
         route_runtime.clone(),
         &admission_tx,
         config_rx.clone(),
@@ -789,6 +877,7 @@ async fn run_telemt_core(
         buffer_pool.clone(),
         rng.clone(),
         me_pool.clone(),
+        api_me_pool.clone(),
         route_runtime.clone(),
         tls_cache.clone(),
         ip_tracker.clone(),
@@ -843,6 +932,7 @@ async fn run_telemt_core(
         buffer_pool.clone(),
         rng.clone(),
         me_pool.clone(),
+        api_me_pool.clone(),
         route_runtime.clone(),
         tls_cache.clone(),
         ip_tracker.clone(),

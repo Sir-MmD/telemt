@@ -257,45 +257,7 @@ pub(crate) async fn spawn_runtime_tasks(
     });
 
     if let Some(pool) = me_pool {
-        let reinit_trigger_capacity = config.general.me_reinit_trigger_channel.max(1);
-        let (reinit_tx, reinit_rx) = mpsc::channel::<MeReinitTrigger>(reinit_trigger_capacity);
-
-        let pool_clone_sched = pool.clone();
-        let rng_clone_sched = rng.clone();
-        let config_rx_clone_sched = config_rx.clone();
-        let me_ready_tx_sched = me_ready_tx.clone();
-        tokio::spawn(async move {
-            crate::transport::middle_proxy::me_reinit_scheduler(
-                pool_clone_sched,
-                rng_clone_sched,
-                config_rx_clone_sched,
-                reinit_rx,
-                me_ready_tx_sched,
-            )
-            .await;
-        });
-
-        let pool_clone = pool.clone();
-        let config_rx_clone = config_rx.clone();
-        let reinit_tx_updater = reinit_tx.clone();
-        tokio::spawn(async move {
-            crate::transport::middle_proxy::me_config_updater(
-                pool_clone,
-                config_rx_clone,
-                reinit_tx_updater,
-            )
-            .await;
-        });
-
-        let config_rx_clone_rot = config_rx.clone();
-        let reinit_tx_rotation = reinit_tx.clone();
-        tokio::spawn(async move {
-            crate::transport::middle_proxy::me_rotation_task(
-                config_rx_clone_rot,
-                reinit_tx_rotation,
-            )
-            .await;
-        });
+        spawn_middle_proxy_runtime_tasks(config, config_rx.clone(), pool, rng, me_ready_tx);
     }
 
     RuntimeWatches {
@@ -304,6 +266,51 @@ pub(crate) async fn spawn_runtime_tasks(
         detected_ip_v4,
         detected_ip_v6,
     }
+}
+
+pub(crate) fn spawn_middle_proxy_runtime_tasks(
+    config: &ProxyConfig,
+    config_rx: watch::Receiver<Arc<ProxyConfig>>,
+    pool: Arc<MePool>,
+    rng: Arc<SecureRandom>,
+    me_ready_tx: watch::Sender<u64>,
+) {
+    let reinit_trigger_capacity = config.general.me_reinit_trigger_channel.max(1);
+    let (reinit_tx, reinit_rx) = mpsc::channel::<MeReinitTrigger>(reinit_trigger_capacity);
+
+    let pool_clone_sched = pool.clone();
+    let rng_clone_sched = rng.clone();
+    let config_rx_clone_sched = config_rx.clone();
+    let me_ready_tx_sched = me_ready_tx.clone();
+    tokio::spawn(async move {
+        crate::transport::middle_proxy::me_reinit_scheduler(
+            pool_clone_sched,
+            rng_clone_sched,
+            config_rx_clone_sched,
+            reinit_rx,
+            me_ready_tx_sched,
+        )
+        .await;
+    });
+
+    let pool_clone = pool.clone();
+    let config_rx_clone = config_rx.clone();
+    let reinit_tx_updater = reinit_tx.clone();
+    tokio::spawn(async move {
+        crate::transport::middle_proxy::me_config_updater(
+            pool_clone,
+            config_rx_clone,
+            reinit_tx_updater,
+        )
+        .await;
+    });
+
+    let config_rx_clone_rot = config_rx.clone();
+    let reinit_tx_rotation = reinit_tx.clone();
+    tokio::spawn(async move {
+        crate::transport::middle_proxy::me_rotation_task(config_rx_clone_rot, reinit_tx_rotation)
+            .await;
+    });
 }
 
 pub(crate) async fn apply_runtime_log_filter(

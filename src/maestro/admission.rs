@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio::sync::watch;
+use tokio::sync::{RwLock, watch};
 use tracing::{info, warn};
 
 use crate::config::ProxyConfig;
@@ -14,24 +14,32 @@ const RUNTIME_FALLBACK_AFTER: Duration = Duration::from_secs(6);
 pub(crate) async fn configure_admission_gate(
     config: &Arc<ProxyConfig>,
     me_pool: Option<Arc<MePool>>,
+    me_pool_runtime: Arc<RwLock<Option<Arc<MePool>>>>,
     route_runtime: Arc<RouteRuntimeController>,
     admission_tx: &watch::Sender<bool>,
     config_rx: watch::Receiver<Arc<ProxyConfig>>,
     me_ready_rx: watch::Receiver<u64>,
 ) {
     if config.general.use_middle_proxy {
-        if let Some(pool) = me_pool.as_ref() {
-            let initial_ready = pool.admission_ready_conditional_cast().await;
+        if me_pool.is_some() || config.general.me2dc_fallback {
+            let initial_pool = match me_pool.as_ref() {
+                Some(pool) => Some(pool.clone()),
+                None => me_pool_runtime.read().await.clone(),
+            };
+            let initial_ready = match initial_pool.as_ref() {
+                Some(pool) => pool.admission_ready_conditional_cast().await,
+                None => false,
+            };
             let mut fallback_enabled = config.general.me2dc_fallback;
             let mut fast_fallback_enabled = fallback_enabled && config.general.me2dc_fast;
             let (initial_gate_open, initial_route_mode, initial_fallback_reason) = if initial_ready
             {
                 (true, RelayRouteMode::Middle, None)
-            } else if fast_fallback_enabled {
+            } else if fallback_enabled {
                 (
                     true,
                     RelayRouteMode::Direct,
-                    Some("fast_not_ready_fallback"),
+                    Some("startup_direct_fallback"),
                 )
             } else {
                 (false, RelayRouteMode::Middle, None)
@@ -49,7 +57,8 @@ pub(crate) async fn configure_admission_gate(
                 warn!("Conditional-admission gate: closed / ME pool is NOT ready)");
             }
 
-            let pool_for_gate = pool.clone();
+            let mut pool_for_gate = initial_pool;
+            let pool_runtime_for_gate = me_pool_runtime.clone();
             let admission_tx_gate = admission_tx.clone();
             let route_runtime_gate = route_runtime.clone();
             let mut config_rx_gate = config_rx.clone();
@@ -83,12 +92,27 @@ pub(crate) async fn configure_admission_gate(
                         }
                         _ = tokio::time::sleep(Duration::from_millis(admission_poll_ms)) => {}
                     }
-                    let ready = pool_for_gate.admission_ready_conditional_cast().await;
+                    if pool_for_gate.is_none() {
+                        pool_for_gate = pool_runtime_for_gate.read().await.clone();
+                    }
+                    let ready = match pool_for_gate.as_ref() {
+                        Some(pool) => pool.admission_ready_conditional_cast().await,
+                        None => false,
+                    };
                     let now = Instant::now();
                     let (next_gate_open, next_route_mode, next_fallback_reason) = if ready {
                         ready_observed = true;
                         not_ready_since = None;
+                        if let Some(pool) = pool_for_gate.as_ref() {
+                            pool.set_runtime_ready(true);
+                        }
                         (true, RelayRouteMode::Middle, None)
+                    } else if fallback_enabled && !ready_observed {
+                        (
+                            true,
+                            RelayRouteMode::Direct,
+                            Some("startup_direct_fallback"),
+                        )
                     } else if fast_fallback_enabled {
                         (
                             true,
@@ -122,7 +146,14 @@ pub(crate) async fn configure_admission_gate(
                                 );
                             } else {
                                 let fallback_reason = next_fallback_reason.unwrap_or("unknown");
-                                if fallback_reason == "strict_grace_fallback" {
+                                if fallback_reason == "startup_direct_fallback" {
+                                    warn!(
+                                        target_mode = route_mode.as_str(),
+                                        cutover_generation = snapshot.generation,
+                                        fallback_reason,
+                                        "ME pool not-ready during startup; routing new sessions via Direct-DC"
+                                    );
+                                } else if fallback_reason == "strict_grace_fallback" {
                                     let fallback_after = if ready_observed {
                                         RUNTIME_FALLBACK_AFTER
                                     } else {
