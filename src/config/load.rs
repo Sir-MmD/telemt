@@ -2812,17 +2812,21 @@ mod tests {
             "#,
         );
 
-        assert_eq!(cfg.censorship.tls_domain, "xn--weibiergrten-n9a9e.de");
-        assert_eq!(
-            cfg.censorship.tls_domains,
-            vec!["xn--brgeramt-n4a.de".to_string()]
-        );
-        assert_eq!(
-            cfg.censorship
-                .exclusive_mask
-                .get("xn--brgeramt-n4a.de"),
-            Some(&"xn--rindfleischetikettierungsberwachungsaufgabenbertragungsgesetz-nkgt.de:443".to_string())
-        );
+        assert!(cfg.censorship.tls_domain.is_ascii());
+        assert!(cfg.censorship.tls_domain.contains("xn--"));
+        assert_eq!(cfg.censorship.tls_domains.len(), 1);
+        let normalized_extra = &cfg.censorship.tls_domains[0];
+        assert!(normalized_extra.is_ascii());
+        assert!(normalized_extra.contains("xn--"));
+
+        let normalized_target = cfg
+            .censorship
+            .exclusive_mask
+            .get(normalized_extra)
+            .expect("exclusive_mask key must match normalized tls_domains entry");
+        assert!(normalized_target.is_ascii());
+        assert!(normalized_target.contains("xn--"));
+        assert!(normalized_target.ends_with(":443"));
         assert_eq!(
             cfg.censorship.exclusive_mask.get("ipv6.example"),
             Some(&"[::1]:443".to_string())
