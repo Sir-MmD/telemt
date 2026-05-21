@@ -10,6 +10,8 @@ This document lists all configuration keys accepted by `config.toml`.
 >
 > The configuration parameters detailed in this document are intended for advanced users and fine-tuning purposes. Modifying these settings without a clear understanding of their function may lead to application instability or other unexpected behavior. Please proceed with caution and at your own risk.
 
+> `Hot-Reload` marks whether a changed value is applied by the config watcher without restarting the process; `✘` means restart is required for runtime effect.
+
 # Table of contents
  - [Top-level keys](#top-level-keys)
  - [general](#general)
@@ -29,12 +31,16 @@ This document lists all configuration keys accepted by `config.toml`.
 
 # Top-level keys
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`include`](#include) | `String` (special directive) | — |
-| [`show_link`](#show_link) | `"*"` or `String[]` | `[]` (`ShowLink::None`) |
-| [`dc_overrides`](#dc_overrides) | `Map<String, String or String[]>` | `{}` |
-| [`default_dc`](#default_dc) | `u8` | — (effective fallback: `2` in ME routing) |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`include`](#include) | `String` (special directive) | — | `✔` |
+| [`show_link`](#show_link) | `"*"` or `String[]` | `[]` (`ShowLink::None`) | `✘` |
+| [`dc_overrides`](#dc_overrides) | `Map<String, String or String[]>` | `{}` | `✘` |
+| [`default_dc`](#default_dc) | `u8` | — (effective fallback: `2` in ME routing) | `✘` |
+| [`beobachten`](#beobachten) | `bool` | `true` | `✘` |
+| [`beobachten_minutes`](#beobachten_minutes) | `u64` | `10` | `✘` |
+| [`beobachten_flush_secs`](#beobachten_flush_secs) | `u64` | `15` | `✘` |
+| [`beobachten_file`](#beobachten_file) | `String` | `"cache/beobachten.txt"` | `✘` |
 
 ## include
   - **Constraints / validation**: Must be a single-line directive in the form `include = "path/to/file.toml"`. Includes are expanded before TOML parsing. Maximum include depth is 10.
@@ -218,6 +224,151 @@ This document lists all configuration keys accepted by `config.toml`.
 | [`auto_degradation_enabled`](#auto_degradation_enabled) | `bool` | `true` |
 | [`degradation_min_unavailable_dc_groups`](#degradation_min_unavailable_dc_groups) | `u8` | `2` |
 | [`rst_on_close`](#rst_on_close) | `"off"`, `"errors"`, or `"always"` | `"off"` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`data_path`](#data_path) | `String` | — | `✘` |
+| [`quota_state_path`](#quota_state_path) | `Path` | `"telemt.limit.json"` | `✘` |
+| [`config_strict`](#config_strict) | `bool` | `false` | `✘` |
+| [`prefer_ipv6`](#prefer_ipv6) | `bool` | `false` | `✘` |
+| [`fast_mode`](#fast_mode) | `bool` | `true` | `✘` |
+| [`use_middle_proxy`](#use_middle_proxy) | `bool` | `true` | `✘` |
+| [`proxy_secret_path`](#proxy_secret_path) | `String` | `"proxy-secret"` | `✘` |
+| [`proxy_secret_url`](#proxy_secret_url) | `String` | `"https://core.telegram.org/getProxySecret"` | `✘` |
+| [`proxy_config_v4_cache_path`](#proxy_config_v4_cache_path) | `String` | `"cache/proxy-config-v4.txt"` | `✘` |
+| [`proxy_config_v4_url`](#proxy_config_v4_url) | `String` | `"https://core.telegram.org/getProxyConfig"` | `✘` |
+| [`proxy_config_v6_cache_path`](#proxy_config_v6_cache_path) | `String` | `"cache/proxy-config-v6.txt"` | `✘` |
+| [`proxy_config_v6_url`](#proxy_config_v6_url) | `String` | `"https://core.telegram.org/getProxyConfigV6"` | `✘` |
+| [`ad_tag`](#ad_tag) | `String` | — | `✔` |
+| [`middle_proxy_nat_ip`](#middle_proxy_nat_ip) | `IpAddr` | — | `✘` |
+| [`middle_proxy_nat_probe`](#middle_proxy_nat_probe) | `bool` | `true` | `✘` |
+| [`middle_proxy_nat_stun`](#middle_proxy_nat_stun) | `String` | — | `✘` |
+| [`middle_proxy_nat_stun_servers`](#middle_proxy_nat_stun_servers) | `String[]` | `[]` | `✘` |
+| [`stun_nat_probe_concurrency`](#stun_nat_probe_concurrency) | `usize` | `8` | `✘` |
+| [`middle_proxy_pool_size`](#middle_proxy_pool_size) | `usize` | `8` | `✘` |
+| [`middle_proxy_warm_standby`](#middle_proxy_warm_standby) | `usize` | `16` | `✘` |
+| [`me_init_retry_attempts`](#me_init_retry_attempts) | `u32` | `0` | `✘` |
+| [`me2dc_fallback`](#me2dc_fallback) | `bool` | `true` | `✘` |
+| [`me2dc_fast`](#me2dc_fast) | `bool` | `false` | `✘` |
+| [`me_keepalive_enabled`](#me_keepalive_enabled) | `bool` | `true` | `✘` |
+| [`me_keepalive_interval_secs`](#me_keepalive_interval_secs) | `u64` | `8` | `✘` |
+| [`me_keepalive_jitter_secs`](#me_keepalive_jitter_secs) | `u64` | `2` | `✘` |
+| [`me_keepalive_payload_random`](#me_keepalive_payload_random) | `bool` | `true` | `✘` |
+| [`rpc_proxy_req_every`](#rpc_proxy_req_every) | `u64` | `0` | `✘` |
+| [`me_writer_cmd_channel_capacity`](#me_writer_cmd_channel_capacity) | `usize` | `4096` | `✘` |
+| [`me_route_channel_capacity`](#me_route_channel_capacity) | `usize` | `768` | `✘` |
+| [`me_c2me_channel_capacity`](#me_c2me_channel_capacity) | `usize` | `1024` | `✘` |
+| [`me_c2me_send_timeout_ms`](#me_c2me_send_timeout_ms) | `u64` | `4000` | `✘` |
+| [`me_reader_route_data_wait_ms`](#me_reader_route_data_wait_ms) | `u64` | `2` | `✔` |
+| [`me_d2c_flush_batch_max_frames`](#me_d2c_flush_batch_max_frames) | `usize` | `32` | `✔` |
+| [`me_d2c_flush_batch_max_bytes`](#me_d2c_flush_batch_max_bytes) | `usize` | `131072` | `✔` |
+| [`me_d2c_flush_batch_max_delay_us`](#me_d2c_flush_batch_max_delay_us) | `u64` | `500` | `✔` |
+| [`me_d2c_ack_flush_immediate`](#me_d2c_ack_flush_immediate) | `bool` | `true` | `✔` |
+| [`me_quota_soft_overshoot_bytes`](#me_quota_soft_overshoot_bytes) | `u64` | `65536` | `✔` |
+| [`me_d2c_frame_buf_shrink_threshold_bytes`](#me_d2c_frame_buf_shrink_threshold_bytes) | `usize` | `262144` | `✔` |
+| [`direct_relay_copy_buf_c2s_bytes`](#direct_relay_copy_buf_c2s_bytes) | `usize` | `65536` | `✔` |
+| [`direct_relay_copy_buf_s2c_bytes`](#direct_relay_copy_buf_s2c_bytes) | `usize` | `262144` | `✔` |
+| [`crypto_pending_buffer`](#crypto_pending_buffer) | `usize` | `262144` | `✘` |
+| [`max_client_frame`](#max_client_frame) | `usize` | `16777216` | `✘` |
+| [`desync_all_full`](#desync_all_full) | `bool` | `false` | `✔` |
+| [`beobachten`](#beobachten) | `bool` | `true` | `✘` |
+| [`beobachten_minutes`](#beobachten_minutes) | `u64` | `10` | `✘` |
+| [`beobachten_flush_secs`](#beobachten_flush_secs) | `u64` | `15` | `✘` |
+| [`beobachten_file`](#beobachten_file) | `String` | `"cache/beobachten.txt"` | `✘` |
+| [`hardswap`](#hardswap) | `bool` | `true` | `✔` |
+| [`me_warmup_stagger_enabled`](#me_warmup_stagger_enabled) | `bool` | `true` | `✘` |
+| [`me_warmup_step_delay_ms`](#me_warmup_step_delay_ms) | `u64` | `500` | `✘` |
+| [`me_warmup_step_jitter_ms`](#me_warmup_step_jitter_ms) | `u64` | `300` | `✘` |
+| [`me_reconnect_max_concurrent_per_dc`](#me_reconnect_max_concurrent_per_dc) | `u32` | `8` | `✘` |
+| [`me_reconnect_backoff_base_ms`](#me_reconnect_backoff_base_ms) | `u64` | `500` | `✘` |
+| [`me_reconnect_backoff_cap_ms`](#me_reconnect_backoff_cap_ms) | `u64` | `30000` | `✘` |
+| [`me_reconnect_fast_retry_count`](#me_reconnect_fast_retry_count) | `u32` | `16` | `✘` |
+| [`me_single_endpoint_shadow_writers`](#me_single_endpoint_shadow_writers) | `u8` | `2` | `✔` |
+| [`me_single_endpoint_outage_mode_enabled`](#me_single_endpoint_outage_mode_enabled) | `bool` | `true` | `✔` |
+| [`me_single_endpoint_outage_disable_quarantine`](#me_single_endpoint_outage_disable_quarantine) | `bool` | `true` | `✔` |
+| [`me_single_endpoint_outage_backoff_min_ms`](#me_single_endpoint_outage_backoff_min_ms) | `u64` | `250` | `✔` |
+| [`me_single_endpoint_outage_backoff_max_ms`](#me_single_endpoint_outage_backoff_max_ms) | `u64` | `3000` | `✔` |
+| [`me_single_endpoint_shadow_rotate_every_secs`](#me_single_endpoint_shadow_rotate_every_secs) | `u64` | `900` | `✔` |
+| [`me_floor_mode`](#me_floor_mode) | `"static"` or `"adaptive"` | `"adaptive"` | `✔` |
+| [`me_adaptive_floor_idle_secs`](#me_adaptive_floor_idle_secs) | `u64` | `90` | `✔` |
+| [`me_adaptive_floor_min_writers_single_endpoint`](#me_adaptive_floor_min_writers_single_endpoint) | `u8` | `1` | `✔` |
+| [`me_adaptive_floor_min_writers_multi_endpoint`](#me_adaptive_floor_min_writers_multi_endpoint) | `u8` | `1` | `✔` |
+| [`me_adaptive_floor_recover_grace_secs`](#me_adaptive_floor_recover_grace_secs) | `u64` | `180` | `✔` |
+| [`me_adaptive_floor_writers_per_core_total`](#me_adaptive_floor_writers_per_core_total) | `u16` | `48` | `✔` |
+| [`me_adaptive_floor_cpu_cores_override`](#me_adaptive_floor_cpu_cores_override) | `u16` | `0` | `✔` |
+| [`me_adaptive_floor_max_extra_writers_single_per_core`](#me_adaptive_floor_max_extra_writers_single_per_core) | `u16` | `1` | `✔` |
+| [`me_adaptive_floor_max_extra_writers_multi_per_core`](#me_adaptive_floor_max_extra_writers_multi_per_core) | `u16` | `2` | `✔` |
+| [`me_adaptive_floor_max_active_writers_per_core`](#me_adaptive_floor_max_active_writers_per_core) | `u16` | `64` | `✔` |
+| [`me_adaptive_floor_max_warm_writers_per_core`](#me_adaptive_floor_max_warm_writers_per_core) | `u16` | `64` | `✔` |
+| [`me_adaptive_floor_max_active_writers_global`](#me_adaptive_floor_max_active_writers_global) | `u32` | `256` | `✔` |
+| [`me_adaptive_floor_max_warm_writers_global`](#me_adaptive_floor_max_warm_writers_global) | `u32` | `256` | `✔` |
+| [`upstream_connect_retry_attempts`](#upstream_connect_retry_attempts) | `u32` | `2` | `✘` |
+| [`upstream_connect_retry_backoff_ms`](#upstream_connect_retry_backoff_ms) | `u64` | `100` | `✘` |
+| [`upstream_connect_budget_ms`](#upstream_connect_budget_ms) | `u64` | `3000` | `✘` |
+| [`tg_connect`](#tg_connect) | `u64` | `10` | `✘` |
+| [`upstream_unhealthy_fail_threshold`](#upstream_unhealthy_fail_threshold) | `u32` | `5` | `✘` |
+| [`upstream_connect_failfast_hard_errors`](#upstream_connect_failfast_hard_errors) | `bool` | `false` | `✘` |
+| [`stun_iface_mismatch_ignore`](#stun_iface_mismatch_ignore) | `bool` | `false` | `✘` |
+| [`unknown_dc_log_path`](#unknown_dc_log_path) | `String` | `"unknown-dc.txt"` | `✘` |
+| [`unknown_dc_file_log_enabled`](#unknown_dc_file_log_enabled) | `bool` | `false` | `✘` |
+| [`log_level`](#log_level) | `"debug"`, `"verbose"`, `"normal"`, or `"silent"` | `"normal"` | `✔` |
+| [`disable_colors`](#disable_colors) | `bool` | `false` | `✘` |
+| [`me_socks_kdf_policy`](#me_socks_kdf_policy) | `"strict"` or `"compat"` | `"strict"` | `✔` |
+| [`me_route_backpressure_enabled`](#me_route_backpressure_enabled) | `bool` | `false` | `✔` |
+| [`me_route_fairshare_enabled`](#me_route_fairshare_enabled) | `bool` | `false` | `✔` |
+| [`me_route_backpressure_base_timeout_ms`](#me_route_backpressure_base_timeout_ms) | `u64` | `25` | `✔` |
+| [`me_route_backpressure_high_timeout_ms`](#me_route_backpressure_high_timeout_ms) | `u64` | `120` | `✔` |
+| [`me_route_backpressure_high_watermark_pct`](#me_route_backpressure_high_watermark_pct) | `u8` | `80` | `✔` |
+| [`me_health_interval_ms_unhealthy`](#me_health_interval_ms_unhealthy) | `u64` | `1000` | `✔` |
+| [`me_health_interval_ms_healthy`](#me_health_interval_ms_healthy) | `u64` | `3000` | `✔` |
+| [`me_admission_poll_ms`](#me_admission_poll_ms) | `u64` | `1000` | `✔` |
+| [`me_warn_rate_limit_ms`](#me_warn_rate_limit_ms) | `u64` | `5000` | `✔` |
+| [`me_route_no_writer_mode`](#me_route_no_writer_mode) | `"async_recovery_failfast"`, `"inline_recovery_legacy"`, or `"hybrid_async_persistent"` | `"hybrid_async_persistent"` | `✘` |
+| [`me_route_no_writer_wait_ms`](#me_route_no_writer_wait_ms) | `u64` | `250` | `✘` |
+| [`me_route_hybrid_max_wait_ms`](#me_route_hybrid_max_wait_ms) | `u64` | `3000` | `✘` |
+| [`me_route_blocking_send_timeout_ms`](#me_route_blocking_send_timeout_ms) | `u64` | `250` | `✘` |
+| [`me_route_inline_recovery_attempts`](#me_route_inline_recovery_attempts) | `u32` | `3` | `✘` |
+| [`me_route_inline_recovery_wait_ms`](#me_route_inline_recovery_wait_ms) | `u64` | `3000` | `✘` |
+| [`fast_mode_min_tls_record`](#fast_mode_min_tls_record) | `usize` | `0` | `✘` |
+| [`update_every`](#update_every) | `u64` | `300` | `✔` |
+| [`me_reinit_every_secs`](#me_reinit_every_secs) | `u64` | `900` | `✔` |
+| [`me_hardswap_warmup_delay_min_ms`](#me_hardswap_warmup_delay_min_ms) | `u64` | `1000` | `✔` |
+| [`me_hardswap_warmup_delay_max_ms`](#me_hardswap_warmup_delay_max_ms) | `u64` | `2000` | `✔` |
+| [`me_hardswap_warmup_extra_passes`](#me_hardswap_warmup_extra_passes) | `u8` | `3` | `✔` |
+| [`me_hardswap_warmup_pass_backoff_base_ms`](#me_hardswap_warmup_pass_backoff_base_ms) | `u64` | `500` | `✔` |
+| [`me_config_stable_snapshots`](#me_config_stable_snapshots) | `u8` | `2` | `✔` |
+| [`me_config_apply_cooldown_secs`](#me_config_apply_cooldown_secs) | `u64` | `300` | `✔` |
+| [`me_snapshot_require_http_2xx`](#me_snapshot_require_http_2xx) | `bool` | `true` | `✔` |
+| [`me_snapshot_reject_empty_map`](#me_snapshot_reject_empty_map) | `bool` | `true` | `✔` |
+| [`me_snapshot_min_proxy_for_lines`](#me_snapshot_min_proxy_for_lines) | `u32` | `1` | `✔` |
+| [`proxy_secret_stable_snapshots`](#proxy_secret_stable_snapshots) | `u8` | `2` | `✔` |
+| [`proxy_secret_rotate_runtime`](#proxy_secret_rotate_runtime) | `bool` | `true` | `✔` |
+| [`me_secret_atomic_snapshot`](#me_secret_atomic_snapshot) | `bool` | `true` | `✔` |
+| [`proxy_secret_len_max`](#proxy_secret_len_max) | `usize` | `256` | `✔` |
+| [`me_pool_drain_ttl_secs`](#me_pool_drain_ttl_secs) | `u64` | `90` | `✔` |
+| [`me_instadrain`](#me_instadrain) | `bool` | `false` | `✔` |
+| [`me_pool_drain_threshold`](#me_pool_drain_threshold) | `u64` | `32` | `✔` |
+| [`me_pool_drain_soft_evict_enabled`](#me_pool_drain_soft_evict_enabled) | `bool` | `true` | `✘` |
+| [`me_pool_drain_soft_evict_grace_secs`](#me_pool_drain_soft_evict_grace_secs) | `u64` | `10` | `✘` |
+| [`me_pool_drain_soft_evict_per_writer`](#me_pool_drain_soft_evict_per_writer) | `u8` | `2` | `✘` |
+| [`me_pool_drain_soft_evict_budget_per_core`](#me_pool_drain_soft_evict_budget_per_core) | `u16` | `16` | `✘` |
+| [`me_pool_drain_soft_evict_cooldown_ms`](#me_pool_drain_soft_evict_cooldown_ms) | `u64` | `1000` | `✘` |
+| [`me_bind_stale_mode`](#me_bind_stale_mode) | `"never"`, `"ttl"`, or `"always"` | `"ttl"` | `✔` |
+| [`me_bind_stale_ttl_secs`](#me_bind_stale_ttl_secs) | `u64` | `90` | `✔` |
+| [`me_pool_min_fresh_ratio`](#me_pool_min_fresh_ratio) | `f32` | `0.8` | `✔` |
+| [`me_reinit_drain_timeout_secs`](#me_reinit_drain_timeout_secs) | `u64` | `90` | `✔` |
+| [`proxy_secret_auto_reload_secs`](#proxy_secret_auto_reload_secs) | `u64` | `3600` | `✔` |
+| [`proxy_config_auto_reload_secs`](#proxy_config_auto_reload_secs) | `u64` | `3600` | `✔` |
+| [`me_reinit_singleflight`](#me_reinit_singleflight) | `bool` | `true` | `✔` |
+| [`me_reinit_trigger_channel`](#me_reinit_trigger_channel) | `usize` | `64` | `✘` |
+| [`me_reinit_coalesce_window_ms`](#me_reinit_coalesce_window_ms) | `u64` | `200` | `✔` |
+| [`me_deterministic_writer_sort`](#me_deterministic_writer_sort) | `bool` | `true` | `✔` |
+| [`me_writer_pick_mode`](#me_writer_pick_mode) | `"sorted_rr"` or `"p2c"` | `"p2c"` | `✔` |
+| [`me_writer_pick_sample_size`](#me_writer_pick_sample_size) | `u8` | `3` | `✔` |
+| [`ntp_check`](#ntp_check) | `bool` | `true` | `✘` |
+| [`ntp_servers`](#ntp_servers) | `String[]` | `["pool.ntp.org"]` | `✘` |
+| [`auto_degradation_enabled`](#auto_degradation_enabled) | `bool` | `true` | `✘` |
+| [`degradation_min_unavailable_dc_groups`](#degradation_min_unavailable_dc_groups) | `u8` | `2` | `✘` |
+| [`rst_on_close`](#rst_on_close) | `"off"`, `"errors"`, or `"always"` | `"off"` | `✘` |
 
 ## data_path
   - **Constraints / validation**: `String` (optional).
@@ -227,6 +378,24 @@ This document lists all configuration keys accepted by `config.toml`.
     ```toml
     [general]
     data_path = "/var/lib/telemt"
+    ```
+## quota_state_path
+  - **Constraints / validation**: `Path`. Relative paths are resolved from the process working directory.
+  - **Description**: JSON state file used to persist runtime per-user quota consumption.
+  - **Example**:
+
+    ```toml
+    [general]
+    quota_state_path = "telemt.limit.json"
+    ```
+## config_strict
+  - **Constraints / validation**: `bool`.
+  - **Description**: Rejects unknown TOML keys during config load. Startup fails fast; hot-reload rejects the new snapshot and keeps the current config.
+  - **Example**:
+
+    ```toml
+    [general]
+    config_strict = true
     ```
 ## prefer_ipv6
   - **Constraints / validation**: Deprecated. Use `network.prefer`.
@@ -905,6 +1074,15 @@ This document lists all configuration keys accepted by `config.toml`.
     [general]
     upstream_connect_budget_ms = 3000
     ```
+## tg_connect
+  - **Constraints / validation**: Must be `> 0` (seconds).
+  - **Description**: Upstream Telegram connect timeout.
+  - **Example**:
+
+    ```toml
+    [general]
+    tg_connect = 10
+    ```
 ## upstream_unhealthy_fail_threshold
   - **Constraints / validation**: Must be `> 0`.
   - **Description**: Consecutive failed requests before upstream is marked unhealthy.
@@ -1520,11 +1698,11 @@ This document lists all configuration keys accepted by `config.toml`.
 # [general.modes]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`classic`](#classic) | `bool` | `false` |
-| [`secure`](#secure) | `bool` | `false` |
-| [`tls`](#tls) | `bool` | `true` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`classic`](#classic) | `bool` | `false` | `✘` |
+| [`secure`](#secure) | `bool` | `false` | `✘` |
+| [`tls`](#tls) | `bool` | `true` | `✘` |
 
 ## classic
   - **Constraints / validation**: `bool`.
@@ -1558,11 +1736,11 @@ This document lists all configuration keys accepted by `config.toml`.
 # [general.links]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`show`](#show) | `"*"` or `String[]` | `"*"` |
-| [`public_host`](#public_host) | `String` | — |
-| [`public_port`](#public_port) | `u16` | — |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`show`](#show) | `"*"` or `String[]` | `"*"` | `✘` |
+| [`public_host`](#public_host) | `String` | — | `✘` |
+| [`public_port`](#public_port) | `u16` | — | `✘` |
 
 ## show
   - **Constraints / validation**: `"*"` or `String[]`. An empty array means "show none".
@@ -1598,11 +1776,11 @@ This document lists all configuration keys accepted by `config.toml`.
 # [general.telemetry]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`core_enabled`](#core_enabled) | `bool` | `true` |
-| [`user_enabled`](#user_enabled) | `bool` | `true` |
-| [`me_level`](#me_level) | `"silent"`, `"normal"`, or `"debug"` | `"normal"` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`core_enabled`](#core_enabled) | `bool` | `true` | `✔` |
+| [`user_enabled`](#user_enabled) | `bool` | `true` | `✔` |
+| [`me_level`](#me_level) | `"silent"`, `"normal"`, or `"debug"` | `"normal"` | `✔` |
 
 ## core_enabled
   - **Constraints / validation**: `bool`.
@@ -1636,18 +1814,18 @@ This document lists all configuration keys accepted by `config.toml`.
 # [network]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`ipv4`](#ipv4) | `bool` | `true` |
-| [`ipv6`](#ipv6) | `bool` | `false` |
-| [`prefer`](#prefer) | `u8` | `4` |
-| [`multipath`](#multipath) | `bool` | `false` |
-| [`stun_use`](#stun_use) | `bool` | `true` |
-| [`stun_servers`](#stun_servers) | `String[]` | Built-in STUN list (13 hosts) |
-| [`stun_tcp_fallback`](#stun_tcp_fallback) | `bool` | `true` |
-| [`http_ip_detect_urls`](#http_ip_detect_urls) | `String[]` | `["https://ifconfig.me/ip", "https://api.ipify.org"]` |
-| [`cache_public_ip_path`](#cache_public_ip_path) | `String` | `"cache/public_ip.txt"` |
-| [`dns_overrides`](#dns_overrides) | `String[]` | `[]` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`ipv4`](#ipv4) | `bool` | `true` | `✘` |
+| [`ipv6`](#ipv6) | `bool` | `false` | `✘` |
+| [`prefer`](#prefer) | `u8` | `4` | `✘` |
+| [`multipath`](#multipath) | `bool` | `false` | `✘` |
+| [`stun_use`](#stun_use) | `bool` | `true` | `✘` |
+| [`stun_servers`](#stun_servers) | `String[]` | Built-in STUN list (13 hosts) | `✘` |
+| [`stun_tcp_fallback`](#stun_tcp_fallback) | `bool` | `true` | `✘` |
+| [`http_ip_detect_urls`](#http_ip_detect_urls) | `String[]` | `["https://ifconfig.me/ip", "https://api.ipify.org"]` | `✘` |
+| [`cache_public_ip_path`](#cache_public_ip_path) | `String` | `"cache/public_ip.txt"` | `✘` |
+| [`dns_overrides`](#dns_overrides) | `String[]` | `[]` | `✔` |
 
 ## ipv4
   - **Constraints / validation**: `bool`.
@@ -1757,23 +1935,27 @@ This document lists all configuration keys accepted by `config.toml`.
 # [server]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`port`](#port) | `u16` | `443` |
-| [`listen_addr_ipv4`](#listen_addr_ipv4) | `String` | `"0.0.0.0"` |
-| [`listen_addr_ipv6`](#listen_addr_ipv6) | `String` | `"::"` |
-| [`listen_unix_sock`](#listen_unix_sock) | `String` | — |
-| [`listen_unix_sock_perm`](#listen_unix_sock_perm) | `String` | — |
-| [`listen_tcp`](#listen_tcp) | `bool` | — (auto) |
-| [`proxy_protocol`](#proxy_protocol) | `bool` | `false` |
-| [`proxy_protocol_header_timeout_ms`](#proxy_protocol_header_timeout_ms) | `u64` | `500` |
-| [`proxy_protocol_trusted_cidrs`](#proxy_protocol_trusted_cidrs) | `IpNetwork[]` | `[]` |
-| [`metrics_port`](#metrics_port) | `u16` | — |
-| [`metrics_listen`](#metrics_listen) | `String` | — |
-| [`metrics_whitelist`](#metrics_whitelist) | `IpNetwork[]` | `["127.0.0.1/32", "::1/128"]` |
-| [`max_connections`](#max_connections) | `u32` | `10000` |
-| [`accept_permit_timeout_ms`](#accept_permit_timeout_ms) | `u64` | `250` |
-| [`listen_backlog`](#listen_backlog) | `u32` | `1024` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`port`](#port) | `u16` | `443` | `✘` |
+| [`listen_addr_ipv4`](#listen_addr_ipv4) | `String` | `"0.0.0.0"` | `✘` |
+| [`listen_addr_ipv6`](#listen_addr_ipv6) | `String` | `"::"` | `✘` |
+| [`listen_unix_sock`](#listen_unix_sock) | `String` | — | `✘` |
+| [`listen_unix_sock_perm`](#listen_unix_sock_perm) | `String` | — | `✘` |
+| [`listen_tcp`](#listen_tcp) | `bool` | — (auto) | `✘` |
+| [`proxy_protocol`](#proxy_protocol) | `bool` | `false` | `✘` |
+| [`proxy_protocol_header_timeout_ms`](#proxy_protocol_header_timeout_ms) | `u64` | `500` | `✘` |
+| [`proxy_protocol_trusted_cidrs`](#proxy_protocol_trusted_cidrs) | `IpNetwork[]` | `[]` | `✘` |
+| [`metrics_port`](#metrics_port) | `u16` | — | `✘` |
+| [`metrics_listen`](#metrics_listen) | `String` | — | `✘` |
+| [`metrics_whitelist`](#metrics_whitelist) | `IpNetwork[]` | `["127.0.0.1/32", "::1/128"]` | `✘` |
+| [`api`](#serverapi) | `Table` | built-in defaults | `✘` |
+| [`admin_api`](#serverapi) | `Table` | alias for `api` | `✘` |
+| [`listeners`](#serverlisteners) | `Table[]` | derived from legacy listener fields | `✘` |
+| [`max_connections`](#max_connections) | `u32` | `10000` | `✘` |
+| [`accept_permit_timeout_ms`](#accept_permit_timeout_ms) | `u64` | `250` | `✘` |
+| [`listen_backlog`](#listen_backlog) | `u32` | `1024` | `✘` |
+| [`conntrack_control`](#serverconntrack_control) | `Table` | built-in defaults | `✘` |
 
 ## port
   - **Constraints / validation**: `u16`.
@@ -1930,16 +2112,16 @@ Note: When `server.proxy_protocol` is enabled, incoming PROXY protocol headers a
 Note: The conntrack-control worker runs **only on Linux**. On other operating systems it is not started; if `inline_conntrack_control` is `true`, a warning is logged. Effective operation also requires **CAP_NET_ADMIN** and a usable backend (`nft` or `iptables` / `ip6tables` on `PATH`). The `conntrack` utility is used for optional table entry deletes under pressure.
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`inline_conntrack_control`](#inline_conntrack_control) | `bool` | `true` |
-| [`mode`](#mode) | `String` | `"tracked"` |
-| [`backend`](#backend) | `String` | `"auto"` |
-| [`profile`](#profile) | `String` | `"balanced"` |
-| [`hybrid_listener_ips`](#hybrid_listener_ips) | `IpAddr[]` | `[]` |
-| [`pressure_high_watermark_pct`](#pressure_high_watermark_pct) | `u8` | `85` |
-| [`pressure_low_watermark_pct`](#pressure_low_watermark_pct) | `u8` | `70` |
-| [`delete_budget_per_sec`](#delete_budget_per_sec) | `u64` | `4096` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`inline_conntrack_control`](#inline_conntrack_control) | `bool` | `true` | `✘` |
+| [`mode`](#mode) | `String` | `"tracked"` | `✘` |
+| [`backend`](#backend) | `String` | `"auto"` | `✘` |
+| [`profile`](#profile) | `String` | `"balanced"` | `✘` |
+| [`hybrid_listener_ips`](#hybrid_listener_ips) | `IpAddr[]` | `[]` | `✘` |
+| [`pressure_high_watermark_pct`](#pressure_high_watermark_pct) | `u8` | `85` | `✘` |
+| [`pressure_low_watermark_pct`](#pressure_low_watermark_pct) | `u8` | `70` | `✘` |
+| [`delete_budget_per_sec`](#delete_budget_per_sec) | `u64` | `4096` | `✘` |
 
 ## inline_conntrack_control
   - **Constraints / validation**: `bool`.
@@ -2021,21 +2203,21 @@ Note: The conntrack-control worker runs **only on Linux**. On other operating sy
 Note: This section also accepts the legacy alias `[server.admin_api]` (same schema as `[server.api]`).
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`enabled`](#enabled) | `bool` | `true` |
-| [`listen`](#listen) | `String` | `"0.0.0.0:9091"` |
-| [`whitelist`](#whitelist) | `IpNetwork[]` | `["127.0.0.0/8"]` |
-| [`auth_header`](#auth_header) | `String` | `""` |
-| [`request_body_limit_bytes`](#request_body_limit_bytes) | `usize` | `65536` |
-| [`minimal_runtime_enabled`](#minimal_runtime_enabled) | `bool` | `true` |
-| [`minimal_runtime_cache_ttl_ms`](#minimal_runtime_cache_ttl_ms) | `u64` | `1000` |
-| [`runtime_edge_enabled`](#runtime_edge_enabled) | `bool` | `false` |
-| [`runtime_edge_cache_ttl_ms`](#runtime_edge_cache_ttl_ms) | `u64` | `1000` |
-| [`runtime_edge_top_n`](#runtime_edge_top_n) | `usize` | `10` |
-| [`runtime_edge_events_capacity`](#runtime_edge_events_capacity) | `usize` | `256` |
-| [`read_only`](#read_only) | `bool` | `false` |
-| [`gray_action`](#gray_action) | `"drop"`, `"api"`, or `"200"` | `"drop"` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`enabled`](#enabled) | `bool` | `true` | `✘` |
+| [`listen`](#listen) | `String` | `"0.0.0.0:9091"` | `✘` |
+| [`whitelist`](#whitelist) | `IpNetwork[]` | `["127.0.0.0/8"]` | `✘` |
+| [`auth_header`](#auth_header) | `String` | `""` | `✘` |
+| [`request_body_limit_bytes`](#request_body_limit_bytes) | `usize` | `65536` | `✘` |
+| [`minimal_runtime_enabled`](#minimal_runtime_enabled) | `bool` | `true` | `✘` |
+| [`minimal_runtime_cache_ttl_ms`](#minimal_runtime_cache_ttl_ms) | `u64` | `1000` | `✘` |
+| [`runtime_edge_enabled`](#runtime_edge_enabled) | `bool` | `false` | `✘` |
+| [`runtime_edge_cache_ttl_ms`](#runtime_edge_cache_ttl_ms) | `u64` | `1000` | `✘` |
+| [`runtime_edge_top_n`](#runtime_edge_top_n) | `usize` | `10` | `✘` |
+| [`runtime_edge_events_capacity`](#runtime_edge_events_capacity) | `usize` | `256` | `✘` |
+| [`read_only`](#read_only) | `bool` | `false` | `✘` |
+| [`gray_action`](#gray_action) | `"drop"`, `"api"`, or `"200"` | `"drop"` | `✘` |
 
 ## enabled
   - **Constraints / validation**: `bool`.
@@ -2159,13 +2341,14 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
 # [[server.listeners]]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`ip`](#ip) | `IpAddr` | — |
-| [`announce`](#announce) | `String` | — |
-| [`announce_ip`](#announce_ip) | `IpAddr` | — |
-| [`proxy_protocol`](#proxy_protocol) | `bool` | — |
-| [`reuse_allow`](#reuse_allow) | `bool` | `false` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`ip`](#ip) | `IpAddr` | — | `✘` |
+| [`port`](#port-serverlisteners) | `u16` | `server.port` | `✘` |
+| [`announce`](#announce) | `String` | — | `✘` |
+| [`announce_ip`](#announce_ip) | `IpAddr` | — | `✘` |
+| [`proxy_protocol`](#proxy_protocol) | `bool` | — | `✘` |
+| [`reuse_allow`](#reuse_allow) | `bool` | `false` | `✘` |
 
 ## ip
   - **Constraints / validation**: Required field. Must be an `IpAddr`.
@@ -2175,6 +2358,16 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
     ```toml
     [[server.listeners]]
     ip = "0.0.0.0"
+    ```
+## port (server.listeners)
+  - **Constraints / validation**: `u16` (optional). When omitted, falls back to `server.port`.
+  - **Description**: Per-listener TCP port.
+  - **Example**:
+
+    ```toml
+    [[server.listeners]]
+    ip = "0.0.0.0"
+    port = 443
     ```
 ## announce
   - **Constraints / validation**: `String` (optional). Must not be empty when set.
@@ -2209,8 +2402,7 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
     ip = "0.0.0.0"
     proxy_protocol = true
     ```
-## reuse_allow"
-- `reuse_allow`
+## reuse_allow
   - **Constraints / validation**: `bool`.
   - **Description**: Enables `SO_REUSEPORT` for multi-instance bind sharing (allows multiple telemt instances to listen on the same `ip:port`).
   - **Example**:
@@ -2225,18 +2417,18 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
 # [timeouts]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`client_handshake`](#client_handshake) | `u64` | `30` |
-| [`relay_idle_policy_v2_enabled`](#relay_idle_policy_v2_enabled) | `bool` | `true` |
-| [`relay_client_idle_soft_secs`](#relay_client_idle_soft_secs) | `u64` | `120` |
-| [`relay_client_idle_hard_secs`](#relay_client_idle_hard_secs) | `u64` | `360` |
-| [`relay_idle_grace_after_downstream_activity_secs`](#relay_idle_grace_after_downstream_activity_secs) | `u64` | `30` |
-| [`tg_connect`](#tg_connect) | `u64` | `10` |
-| [`client_keepalive`](#client_keepalive) | `u64` | `15` |
-| [`client_ack`](#client_ack) | `u64` | `90` |
-| [`me_one_retry`](#me_one_retry) | `u8` | `12` |
-| [`me_one_timeout_ms`](#me_one_timeout_ms) | `u64` | `1200` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`client_first_byte_idle_secs`](#client_first_byte_idle_secs) | `u64` | `300` | `✘` |
+| [`client_handshake`](#client_handshake) | `u64` | `30` | `✘` |
+| [`relay_idle_policy_v2_enabled`](#relay_idle_policy_v2_enabled) | `bool` | `true` | `✘` |
+| [`relay_client_idle_soft_secs`](#relay_client_idle_soft_secs) | `u64` | `120` | `✘` |
+| [`relay_client_idle_hard_secs`](#relay_client_idle_hard_secs) | `u64` | `360` | `✘` |
+| [`relay_idle_grace_after_downstream_activity_secs`](#relay_idle_grace_after_downstream_activity_secs) | `u64` | `30` | `✘` |
+| [`client_keepalive`](#client_keepalive) | `u64` | `15` | `✘` |
+| [`client_ack`](#client_ack) | `u64` | `90` | `✘` |
+| [`me_one_retry`](#me_one_retry) | `u8` | `12` | `✘` |
+| [`me_one_timeout_ms`](#me_one_timeout_ms) | `u64` | `1200` | `✘` |
 
 ## client_handshake
   - **Constraints / validation**: Must be `> 0`. Value is in seconds. Also used as an upper bound for some TLS emulation delays (see `censorship.server_hello_delay_max_ms`).
@@ -2291,15 +2483,6 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
     ```toml
     [timeouts]
     relay_idle_grace_after_downstream_activity_secs = 30
-    ```
-## tg_connect
-  - **Constraints / validation**: `u64`. Value is in seconds.
-  - **Description**: Upstream Telegram connect timeout (seconds).
-  - **Example**:
-
-    ```toml
-    [timeouts]
-    tg_connect = 10
     ```
 ## client_keepalive
   - **Constraints / validation**: `u64`. Value is in seconds.
@@ -2377,6 +2560,40 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
 | [`mask_timing_normalization_enabled`](#mask_timing_normalization_enabled) | `bool` | `false` |
 | [`mask_timing_normalization_floor_ms`](#mask_timing_normalization_floor_ms) | `u64` | `0` |
 | [`mask_timing_normalization_ceiling_ms`](#mask_timing_normalization_ceiling_ms) | `u64` | `0` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`tls_domain`](#tls_domain) | `String` | `"petrovich.ru"` | `✘` |
+| [`tls_domains`](#tls_domains) | `String[]` | `[]` | `✘` |
+| [`unknown_sni_action`](#unknown_sni_action) | `"drop"`, `"mask"`, `"accept"`, `"reject_handshake"` | `"drop"` | `✘` |
+| [`tls_fetch_scope`](#tls_fetch_scope) | `String` | `""` | `✘` |
+| [`tls_fetch`](#tls_fetch) | `Table` | built-in defaults | `✘` |
+| [`mask`](#mask) | `bool` | `true` | `✘` |
+| [`mask_host`](#mask_host) | `String` | — | `✘` |
+| [`mask_port`](#mask_port) | `u16` | `443` | `✘` |
+| [`mask_unix_sock`](#mask_unix_sock) | `String` | — | `✘` |
+| [`fake_cert_len`](#fake_cert_len) | `usize` | `2048` | `✘` |
+| [`tls_emulation`](#tls_emulation) | `bool` | `true` | `✘` |
+| [`tls_front_dir`](#tls_front_dir) | `String` | `"tlsfront"` | `✘` |
+| [`server_hello_delay_min_ms`](#server_hello_delay_min_ms) | `u64` | `0` | `✘` |
+| [`server_hello_delay_max_ms`](#server_hello_delay_max_ms) | `u64` | `0` | `✘` |
+| [`tls_new_session_tickets`](#tls_new_session_tickets) | `u8` | `0` | `✘` |
+| [`tls_full_cert_ttl_secs`](#tls_full_cert_ttl_secs) | `u64` | `90` | `✘` |
+| [`serverhello_compact`](#serverhello_compact) | `bool` | `false` | `✘` |
+| [`alpn_enforce`](#alpn_enforce) | `bool` | `true` | `✘` |
+| [`mask_proxy_protocol`](#mask_proxy_protocol) | `u8` | `0` | `✘` |
+| [`mask_shape_hardening`](#mask_shape_hardening) | `bool` | `true` | `✘` |
+| [`mask_shape_hardening_aggressive_mode`](#mask_shape_hardening_aggressive_mode) | `bool` | `false` | `✘` |
+| [`mask_shape_bucket_floor_bytes`](#mask_shape_bucket_floor_bytes) | `usize` | `512` | `✘` |
+| [`mask_shape_bucket_cap_bytes`](#mask_shape_bucket_cap_bytes) | `usize` | `4096` | `✘` |
+| [`mask_shape_above_cap_blur`](#mask_shape_above_cap_blur) | `bool` | `false` | `✘` |
+| [`mask_shape_above_cap_blur_max_bytes`](#mask_shape_above_cap_blur_max_bytes) | `usize` | `512` | `✘` |
+| [`mask_relay_max_bytes`](#mask_relay_max_bytes) | `usize` | `5242880` | `✘` |
+| [`mask_relay_timeout_ms`](#mask_relay_timeout_ms) | `u64` | `60_000` | `✘` |
+| [`mask_relay_idle_timeout_ms`](#mask_relay_idle_timeout_ms) | `u64` | `5_000` | `✘` |
+| [`mask_classifier_prefetch_timeout_ms`](#mask_classifier_prefetch_timeout_ms) | `u64` | `5` | `✘` |
+| [`mask_timing_normalization_enabled`](#mask_timing_normalization_enabled) | `bool` | `false` | `✘` |
+| [`mask_timing_normalization_floor_ms`](#mask_timing_normalization_floor_ms) | `u64` | `0` | `✘` |
+| [`mask_timing_normalization_ceiling_ms`](#mask_timing_normalization_ceiling_ms) | `u64` | `0` | `✘` |
 
 ## tls_domain
   - **Constraints / validation**: Must be a non-empty domain name. Must not contain spaces or `/`.
@@ -2810,15 +3027,15 @@ If your backend or network is very bandwidth-constrained, reduce cap first. If p
 # [censorship.tls_fetch]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`profiles`](#profiles) | `String[]` | `["modern_chrome_like", "modern_firefox_like", "compat_tls12", "legacy_minimal"]` |
-| [`strict_route`](#strict_route) | `bool` | `true` |
-| [`attempt_timeout_ms`](#attempt_timeout_ms) | `u64` | `5000` |
-| [`total_budget_ms`](#total_budget_ms) | `u64` | `15000` |
-| [`grease_enabled`](#grease_enabled) | `bool` | `false` |
-| [`deterministic`](#deterministic) | `bool` | `false` |
-| [`profile_cache_ttl_secs`](#profile_cache_ttl_secs) | `u64` | `600` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`profiles`](#profiles) | `String[]` | `["modern_chrome_like", "modern_firefox_like", "compat_tls12", "legacy_minimal"]` | `✘` |
+| [`strict_route`](#strict_route) | `bool` | `true` | `✘` |
+| [`attempt_timeout_ms`](#attempt_timeout_ms) | `u64` | `5000` | `✘` |
+| [`total_budget_ms`](#total_budget_ms) | `u64` | `15000` | `✘` |
+| [`grease_enabled`](#grease_enabled) | `bool` | `false` | `✘` |
+| [`deterministic`](#deterministic) | `bool` | `false` | `✘` |
+| [`profile_cache_ttl_secs`](#profile_cache_ttl_secs) | `u64` | `600` | `✘` |
 
 ## profiles
   - **Constraints / validation**: `String[]`. Empty list falls back to defaults; values are deduplicated preserving order.
@@ -2887,24 +3104,24 @@ If your backend or network is very bandwidth-constrained, reduce cap first. If p
 # [access]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`users`](#users) | `Map<String, String>` | `{"default": "000…000"}` |
-| [`user_ad_tags`](#user_ad_tags) | `Map<String, String>` | `{}` |
-| [`user_max_tcp_conns`](#user_max_tcp_conns) | `Map<String, usize>` | `{}` |
-| [`user_max_tcp_conns_global_each`](#user_max_tcp_conns_global_each) | `usize` | `0` |
-| [`user_expirations`](#user_expirations) | `Map<String, DateTime<Utc>>` | `{}` |
-| [`user_data_quota`](#user_data_quota) | `Map<String, u64>` | `{}` |
-| [`user_max_unique_ips`](#user_max_unique_ips) | `Map<String, usize>` | `{}` |
-| [`user_max_unique_ips_global_each`](#user_max_unique_ips_global_each) | `usize` | `0` |
-| [`user_max_unique_ips_mode`](#user_max_unique_ips_mode) | `"active_window"`, `"time_window"`, or `"combined"` | `"active_window"` |
-| [`user_max_unique_ips_window_secs`](#user_max_unique_ips_window_secs) | `u64` | `30` |
-| [`user_source_deny`](#user_source_deny) | `Map<String, IpNetwork[]>` | `{}` |
-| [`replay_check_len`](#replay_check_len) | `usize` | `65536` |
-| [`replay_window_secs`](#replay_window_secs) | `u64` | `120` |
-| [`ignore_time_skew`](#ignore_time_skew) | `bool` | `false` |
-| [`user_rate_limits`](#user_rate_limits) | `Map<String, RateLimitBps>` | `{}` |
-| [`cidr_rate_limits`](#cidr_rate_limits) | `Map<IpNetwork, RateLimitBps>` | `{}` |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`users`](#users) | `Map<String, String>` | `{"default": "000…000"}` | `✔` |
+| [`user_ad_tags`](#user_ad_tags) | `Map<String, String>` | `{}` | `✔` |
+| [`user_max_tcp_conns`](#user_max_tcp_conns) | `Map<String, usize>` | `{}` | `✔` |
+| [`user_max_tcp_conns_global_each`](#user_max_tcp_conns_global_each) | `usize` | `0` | `✔` |
+| [`user_expirations`](#user_expirations) | `Map<String, DateTime<Utc>>` | `{}` | `✔` |
+| [`user_data_quota`](#user_data_quota) | `Map<String, u64>` | `{}` | `✔` |
+| [`user_max_unique_ips`](#user_max_unique_ips) | `Map<String, usize>` | `{}` | `✔` |
+| [`user_max_unique_ips_global_each`](#user_max_unique_ips_global_each) | `usize` | `0` | `✔` |
+| [`user_max_unique_ips_mode`](#user_max_unique_ips_mode) | `"active_window"`, `"time_window"`, or `"combined"` | `"active_window"` | `✔` |
+| [`user_max_unique_ips_window_secs`](#user_max_unique_ips_window_secs) | `u64` | `30` | `✔` |
+| [`user_source_deny`](#user_source_deny) | `Map<String, IpNetwork[]>` | `{}` | `✘` |
+| [`replay_check_len`](#replay_check_len) | `usize` | `65536` | `✘` |
+| [`replay_window_secs`](#replay_window_secs) | `u64` | `120` | `✘` |
+| [`ignore_time_skew`](#ignore_time_skew) | `bool` | `false` | `✘` |
+| [`user_rate_limits`](#user_rate_limits) | `Map<String, RateLimitBps>` | `{}` | `✔` |
+| [`cidr_rate_limits`](#cidr_rate_limits) | `Map<IpNetwork, RateLimitBps>` | `{}` | `✔` |
 
 ## users
   - **Constraints / validation**: Must not be empty (at least one user must exist). Each value must be **exactly 32 hex characters**.
@@ -3068,19 +3285,23 @@ If your backend or network is very bandwidth-constrained, reduce cap first. If p
 # [[upstreams]]
 
 
-| Key | Type | Default |
-| --- | ---- | ------- |
-| [`type`](#type) | `"direct"`, `"socks4"`, `"socks5"`, or `"shadowsocks"` | — |
-| [`weight`](#weight) | `u16` | `1` |
-| [`enabled`](#enabled) | `bool` | `true` |
-| [`scopes`](#scopes) | `String` | `""` |
-| [`interface`](#interface) | `String` | — |
-| [`bind_addresses`](#bind_addresses) | `String[]` | — |
-| [`url`](#url) | `String` | — |
-| [`address`](#address) | `String` | — |
-| [`user_id`](#user_id) | `String` | — |
-| [`username`](#username) | `String` | — |
-| [`password`](#password) | `String` | — |
+| Key | Type | Default | Hot-Reload |
+| --- | ---- | ------- | ---------- |
+| [`type`](#type) | `"direct"`, `"socks4"`, `"socks5"`, or `"shadowsocks"` | — | `✘` |
+| [`weight`](#weight) | `u16` | `1` | `✘` |
+| [`enabled`](#enabled) | `bool` | `true` | `✘` |
+| [`scopes`](#scopes) | `String` | `""` | `✘` |
+| [`ipv4`](#ipv4-upstreams) | `bool` | — (auto) | `✘` |
+| [`ipv6`](#ipv6-upstreams) | `bool` | — (auto) | `✘` |
+| [`interface`](#interface) | `String` | — | `✘` |
+| [`bind_addresses`](#bind_addresses) | `String[]` | — | `✘` |
+| [`bindtodevice`](#bindtodevice) | `String` | — | `✘` |
+| [`force_bind`](#force_bind) | `String` | — | `✘` |
+| [`url`](#url) | `String` | — | `✘` |
+| [`address`](#address) | `String` | — | `✘` |
+| [`user_id`](#user_id) | `String` | — | `✘` |
+| [`username`](#username) | `String` | — | `✘` |
+| [`password`](#password) | `String` | — | `✘` |
 
 ## type
   - **Constraints / validation**: Required field. Must be one of: `"direct"`, `"socks4"`, `"socks5"`, `"shadowsocks"`.
@@ -3131,6 +3352,26 @@ If your backend or network is very bandwidth-constrained, reduce cap first. If p
     address = "10.0.0.10:1080"
     scopes = "me, fetch, dc2"
     ```
+## ipv4 (upstreams)
+  - **Constraints / validation**: `bool` (optional).
+  - **Description**: Allows IPv4 DC targets for this upstream. When omitted, Telemt auto-detects support from runtime connectivity state.
+  - **Example**:
+
+    ```toml
+    [[upstreams]]
+    type = "direct"
+    ipv4 = true
+    ```
+## ipv6 (upstreams)
+  - **Constraints / validation**: `bool` (optional).
+  - **Description**: Allows IPv6 DC targets for this upstream. When omitted, Telemt auto-detects support from runtime connectivity state.
+  - **Example**:
+
+    ```toml
+    [[upstreams]]
+    type = "direct"
+    ipv6 = false
+    ```
 ## interface
   - **Constraints / validation**: `String` (optional).
     - For `"direct"`: may be an IP address (used as explicit local bind) or an OS interface name (resolved to an IP at runtime; Unix only).
@@ -3160,6 +3401,26 @@ If your backend or network is very bandwidth-constrained, reduce cap first. If p
     [[upstreams]]
     type = "direct"
     bind_addresses = ["192.0.2.10", "192.0.2.11"]
+    ```
+## bindtodevice
+  - **Constraints / validation**: `String` (optional). Applies only to `type = "direct"` and is Linux-only.
+  - **Description**: Hard interface pinning via `SO_BINDTODEVICE` for outgoing direct TCP connects.
+  - **Example**:
+
+    ```toml
+    [[upstreams]]
+    type = "direct"
+    bindtodevice = "eth0"
+    ```
+## force_bind
+  - **Constraints / validation**: `String` (optional). Alias for `bindtodevice`.
+  - **Description**: Backward-compatible alias for Linux `SO_BINDTODEVICE` hard interface pinning.
+  - **Example**:
+
+    ```toml
+    [[upstreams]]
+    type = "direct"
+    force_bind = "eth0"
     ```
 ## url
   - **Constraints / validation**: Applies only to `type = "shadowsocks"`.
