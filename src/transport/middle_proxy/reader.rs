@@ -242,6 +242,7 @@ pub(crate) async fn reader_loop(
     let mut raw = enc_leftover;
     let mut expected_seq: i32 = 0;
     let mut data_route_queue_full_streak = HashMap::<u64, u8>::new();
+    let mut tmp = [0u8; 65_536];
     let mut fairness = WorkerFairnessState::new(
         WorkerFairnessConfig {
             worker_id: (writer_id as u16).saturating_add(1),
@@ -263,7 +264,6 @@ pub(crate) async fn reader_loop(
         let fairshare_enabled = route_fairshare_enabled.load(Ordering::Relaxed);
         fairness.set_backpressure_enabled(backpressure_enabled);
         let fairness_has_backlog = should_schedule_fairness_retry(&fairness_snapshot);
-        let mut tmp = [0u8; 65_536];
         let backlog_retry_enabled = fairness_has_backlog;
         let backlog_retry_delay =
             fairness_retry_delay(reader_route_data_wait_ms.load(Ordering::Relaxed));
