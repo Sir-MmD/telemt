@@ -1,4 +1,4 @@
-F[package]
+[package]
 name = "telemt"
 version = "3.4.14"
 edition = "2024"
