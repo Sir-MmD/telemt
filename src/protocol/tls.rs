@@ -127,6 +127,30 @@ const X25519MLKEM768_SERVER_KEY_SHARE_LEN: usize = 1120;
 const MLKEM768_CLIENT_ENCAPSULATION_KEY_LEN: usize = 1184;
 const MLKEM768_SERVER_CIPHERTEXT_LEN: usize = 1088;
 
+/// ServerHello key_share selected for the authenticated ClientHello.
+#[derive(Clone, Debug)]
+pub(crate) struct ServerHelloKeyShare {
+    group: u16,
+    key_exchange: Vec<u8>,
+}
+
+impl ServerHelloKeyShare {
+    pub(crate) fn new(group: u16, key_exchange: Vec<u8>) -> Self {
+        Self {
+            group,
+            key_exchange,
+        }
+    }
+
+    pub(crate) fn group(&self) -> u16 {
+        self.group
+    }
+
+    pub(crate) fn key_exchange(&self) -> &[u8] {
+        &self.key_exchange
+    }
+}
+
 // ============= TLS Validation Result =============
 
 /// Result of validating TLS handshake
@@ -588,6 +612,65 @@ pub(crate) fn build_x25519mlkem768_server_key_share(
     Some(key_share)
 }
 
+/// Build a valid X25519 ServerHello key_share for the authenticated ClientHello.
+pub(crate) fn build_x25519_server_key_share(
+    handshake: &[u8],
+    rng: &SecureRandom,
+) -> Option<Vec<u8>> {
+    let client_key_exchange =
+        client_hello_key_share_group_entry(handshake, TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN)?;
+    let mut client_x25519 = [0u8; X25519_KEY_SHARE_LEN];
+    client_x25519.copy_from_slice(client_key_exchange);
+    let (server_x25519_scalar, server_x25519_key) = gen_x25519_key_pair(rng);
+    let x25519_shared = x25519(server_x25519_scalar, client_x25519);
+    if bool::from(x25519_shared.ct_eq(&[0u8; X25519_KEY_SHARE_LEN])) {
+        return None;
+    }
+
+    Some(server_x25519_key.to_vec())
+}
+
+fn build_server_hello_key_share_for_group(
+    handshake: &[u8],
+    group: u16,
+    rng: &SecureRandom,
+) -> Option<ServerHelloKeyShare> {
+    match group {
+        TLS_NAMED_GROUP_X25519MLKEM768 => {
+            let key_exchange = build_x25519mlkem768_server_key_share(handshake, rng)?;
+            Some(ServerHelloKeyShare::new(group, key_exchange))
+        }
+        TLS_NAMED_GROUP_X25519 => {
+            let key_exchange = build_x25519_server_key_share(handshake, rng)?;
+            Some(ServerHelloKeyShare::new(group, key_exchange))
+        }
+        _ => None,
+    }
+}
+
+fn server_hello_key_share_candidate_order(preferred_group: Option<u16>) -> [u16; 2] {
+    if preferred_group == Some(TLS_NAMED_GROUP_X25519) {
+        [TLS_NAMED_GROUP_X25519, TLS_NAMED_GROUP_X25519MLKEM768]
+    } else {
+        [TLS_NAMED_GROUP_X25519MLKEM768, TLS_NAMED_GROUP_X25519]
+    }
+}
+
+/// Build a ServerHello key_share using a profile-preferred group when possible.
+pub(crate) fn build_server_hello_key_share(
+    handshake: &[u8],
+    preferred_group: Option<u16>,
+    rng: &SecureRandom,
+) -> Option<ServerHelloKeyShare> {
+    for group in server_hello_key_share_candidate_order(preferred_group) {
+        if let Some(key_share) = build_server_hello_key_share_for_group(handshake, group, rng) {
+            return Some(key_share);
+        }
+    }
+
+    None
+}
+
 /// Build TLS ServerHello response
 ///
 /// This builds a complete TLS 1.3-like response including:
@@ -605,6 +688,10 @@ pub fn build_server_hello(
     alpn: Option<Vec<u8>>,
     new_session_tickets: u8,
 ) -> Vec<u8> {
+    let server_key_share = ServerHelloKeyShare::new(
+        TLS_NAMED_GROUP_X25519MLKEM768,
+        gen_fake_x25519mlkem768_server_key_share(rng),
+    );
     build_server_hello_with_cipher(
         secret,
         client_digest,
@@ -612,7 +699,7 @@ pub fn build_server_hello(
         fake_cert_len,
         rng,
         cipher_suite::TLS_AES_128_GCM_SHA256,
-        &gen_fake_x25519mlkem768_server_key_share(rng),
+        &server_key_share,
         alpn,
         new_session_tickets,
     )
@@ -630,7 +717,7 @@ pub(crate) fn build_server_hello_with_cipher(
     fake_cert_len: usize,
     rng: &SecureRandom,
     selected_cipher_suite: [u8; 2],
-    server_key_share: &[u8],
+    server_key_share: &ServerHelloKeyShare,
     alpn: Option<Vec<u8>>,
     new_session_tickets: u8,
 ) -> Vec<u8> {
@@ -641,7 +728,7 @@ pub(crate) fn build_server_hello_with_cipher(
     // Build ServerHello
     let server_hello = ServerHelloBuilder::new(session_id.to_vec())
         .with_cipher_suite(selected_cipher_suite)
-        .with_key_share(TLS_NAMED_GROUP_X25519MLKEM768, server_key_share)
+        .with_key_share(server_key_share.group(), server_key_share.key_exchange())
         .with_tls13_version()
         .build_record();
 
@@ -1281,22 +1368,36 @@ pub(crate) fn select_server_hello_cipher_suite(
     None
 }
 
-/// Select the hybrid ServerHello key_share named group from the authenticated ClientHello.
-///
-/// Malformed or non-hybrid key_share structures fail closed so authenticated
-/// but DPI-inconsistent ClientHellos take the ordinary masking fallback path.
-pub(crate) fn select_server_hello_key_share_group(handshake: &[u8]) -> Option<u16> {
-    if client_hello_key_share_group_entry(
-        handshake,
-        TLS_NAMED_GROUP_X25519MLKEM768,
-        X25519MLKEM768_CLIENT_KEY_SHARE_LEN,
-    )
-    .is_some()
-    {
-        Some(TLS_NAMED_GROUP_X25519MLKEM768)
-    } else {
-        None
+fn client_hello_key_share_group_len(group: u16) -> Option<usize> {
+    match group {
+        TLS_NAMED_GROUP_X25519MLKEM768 => Some(X25519MLKEM768_CLIENT_KEY_SHARE_LEN),
+        TLS_NAMED_GROUP_X25519 => Some(X25519_KEY_SHARE_LEN),
+        _ => None,
     }
+}
+
+/// Select the ServerHello key_share named group from the authenticated ClientHello.
+///
+/// Malformed key_share structures fail closed so authenticated but
+/// DPI-inconsistent ClientHellos take the ordinary masking fallback path.
+pub(crate) fn select_server_hello_key_share_group(handshake: &[u8]) -> Option<u16> {
+    select_server_hello_key_share_group_with_preference(handshake, None)
+}
+
+/// Select the ServerHello key_share named group with an origin-profile preference.
+pub(crate) fn select_server_hello_key_share_group_with_preference(
+    handshake: &[u8],
+    preferred_group: Option<u16>,
+) -> Option<u16> {
+    for group in server_hello_key_share_candidate_order(preferred_group) {
+        let expected_key_exchange_len = client_hello_key_share_group_len(group)?;
+        if client_hello_key_share_group_entry(handshake, group, expected_key_exchange_len).is_some()
+        {
+            return Some(group);
+        }
+    }
+
+    None
 }
 
 /// Check if bytes look like a TLS ClientHello

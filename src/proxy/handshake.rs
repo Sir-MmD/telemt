@@ -1473,16 +1473,6 @@ where
         return HandshakeResult::BadClient { reader, writer };
     }
 
-    let Some(server_key_share) = tls::build_x25519mlkem768_server_key_share(handshake, rng) else {
-        auth_probe_record_failure_in(shared, peer.ip(), Instant::now());
-        maybe_apply_server_hello_delay(config).await;
-        debug!(
-            peer = %peer,
-            "TLS handshake rejected: ClientHello did not offer a usable X25519MLKEM768 key_share"
-        );
-        return HandshakeResult::BadClient { reader, writer };
-    };
-
     let cached_entry = if config.censorship.tls_emulation {
         if let Some(cache) = tls_cache.as_ref() {
             let selected_domain =
@@ -1494,6 +1484,21 @@ where
         }
     } else {
         None
+    };
+
+    let preferred_key_share_group = cached_entry
+        .as_ref()
+        .and_then(|cached_entry| emulator::profiled_server_hello_key_share_group(cached_entry));
+    let Some(server_key_share) =
+        tls::build_server_hello_key_share(handshake, preferred_key_share_group, rng)
+    else {
+        auth_probe_record_failure_in(shared, peer.ip(), Instant::now());
+        maybe_apply_server_hello_delay(config).await;
+        debug!(
+            peer = %peer,
+            "TLS handshake rejected: ClientHello did not offer a usable TLS 1.3 key_share"
+        );
+        return HandshakeResult::BadClient { reader, writer };
     };
 
     let preferred_cipher_suite = if let Some(cached_entry) = cached_entry.as_ref() {

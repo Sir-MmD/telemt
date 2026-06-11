@@ -4,7 +4,9 @@ use crate::crypto::SecureRandom;
 use crate::protocol::constants::{
     TLS_RECORD_APPLICATION, TLS_RECORD_CHANGE_CIPHER, TLS_RECORD_HANDSHAKE,
 };
-use crate::protocol::tls::ClientHelloTlsVersion;
+use crate::protocol::tls::{
+    ClientHelloTlsVersion, ServerHelloKeyShare, TLS_NAMED_GROUP_X25519MLKEM768,
+};
 use crate::tls_front::emulator::build_emulated_server_hello;
 use crate::tls_front::types::{
     CachedTlsData, ParsedServerHello, TlsBehaviorProfile, TlsProfileSource,
@@ -52,8 +54,8 @@ fn record_lengths_by_type(response: &[u8], wanted_type: u8) -> Vec<usize> {
     out
 }
 
-fn test_server_key_share() -> Vec<u8> {
-    vec![0x42; 1120]
+fn test_server_key_share() -> ServerHelloKeyShare {
+    ServerHelloKeyShare::new(TLS_NAMED_GROUP_X25519MLKEM768, vec![0x42; 1120])
 }
 
 #[test]

@@ -1396,6 +1396,10 @@ fn server_hello_key_share(record: &[u8]) -> Option<(u16, usize)> {
     None
 }
 
+fn test_server_key_share(group: u16, len: usize) -> ServerHelloKeyShare {
+    ServerHelloKeyShare::new(group, vec![0x42; len])
+}
+
 #[test]
 fn build_server_hello_never_places_alpn_in_server_hello_extensions() {
     let secret = b"alpn_sh_forbidden";
@@ -1457,7 +1461,10 @@ fn emulated_server_hello_never_places_alpn_in_server_hello_extensions() {
         true,
         ClientHelloTlsVersion::Tls13,
         [0x13, 0x01],
-        &vec![0x42; X25519MLKEM768_SERVER_KEY_SHARE_LEN],
+        &test_server_key_share(
+            TLS_NAMED_GROUP_X25519MLKEM768,
+            X25519MLKEM768_SERVER_KEY_SHARE_LEN,
+        ),
         &rng,
         Some(b"h2".to_vec()),
         0,
@@ -1542,11 +1549,12 @@ fn test_build_server_hello_structure() {
 }
 
 #[test]
-fn test_build_server_hello_with_cipher_always_uses_hybrid_key_share() {
+fn test_build_server_hello_with_cipher_uses_selected_key_share_group() {
     let secret = b"test secret";
     let client_digest = [0x42u8; 32];
     let session_id = vec![0xAA; 32];
-    let key_share = vec![0x55u8; X25519MLKEM768_SERVER_KEY_SHARE_LEN];
+    let key_share =
+        ServerHelloKeyShare::new(TLS_NAMED_GROUP_X25519, vec![0x55u8; X25519_KEY_SHARE_LEN]);
 
     let rng = crate::crypto::SecureRandom::new();
     let response = build_server_hello_with_cipher(
@@ -1563,10 +1571,7 @@ fn test_build_server_hello_with_cipher_always_uses_hybrid_key_share() {
 
     assert_eq!(
         server_hello_key_share(&response),
-        Some((
-            TLS_NAMED_GROUP_X25519MLKEM768,
-            X25519MLKEM768_SERVER_KEY_SHARE_LEN
-        ))
+        Some((TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN))
     );
 }
 
@@ -1888,6 +1893,23 @@ fn select_server_hello_key_share_group_prefers_hybrid_when_valid_share_is_offere
 }
 
 #[test]
+fn select_server_hello_key_share_group_prefers_profiled_x25519_when_valid_share_is_offered() {
+    let key_share = client_key_share_extension(&[
+        (
+            TLS_NAMED_GROUP_X25519MLKEM768,
+            X25519MLKEM768_CLIENT_KEY_SHARE_LEN,
+        ),
+        (TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN),
+    ]);
+    let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
+
+    assert_eq!(
+        select_server_hello_key_share_group_with_preference(&ch, Some(TLS_NAMED_GROUP_X25519)),
+        Some(TLS_NAMED_GROUP_X25519)
+    );
+}
+
+#[test]
 fn build_x25519mlkem768_server_key_share_accepts_tdesktop_canonical_share() {
     let key_share = client_key_share_extension(&[
         (
@@ -1914,6 +1936,68 @@ fn build_x25519mlkem768_server_key_share_accepts_tdesktop_canonical_share() {
             .iter()
             .any(|byte| *byte != 0),
         "X25519 server share must not be all zero"
+    );
+}
+
+#[test]
+fn build_x25519_server_key_share_accepts_tdesktop_fallback_share() {
+    let key_share = client_key_share_extension(&[
+        (
+            TLS_NAMED_GROUP_X25519MLKEM768,
+            X25519MLKEM768_CLIENT_KEY_SHARE_LEN,
+        ),
+        (TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN),
+    ]);
+    let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
+    let rng = crate::crypto::SecureRandom::new();
+
+    let server_key_share = build_x25519_server_key_share(&ch, &rng)
+        .expect("tdesktop-like X25519 share must build a ServerHello share");
+
+    assert_eq!(server_key_share.len(), X25519_KEY_SHARE_LEN);
+    assert!(
+        server_key_share.iter().any(|byte| *byte != 0),
+        "X25519 server share must not be all zero"
+    );
+}
+
+#[test]
+fn build_server_hello_key_share_prefers_profiled_x25519() {
+    let key_share = client_key_share_extension(&[
+        (
+            TLS_NAMED_GROUP_X25519MLKEM768,
+            X25519MLKEM768_CLIENT_KEY_SHARE_LEN,
+        ),
+        (TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN),
+    ]);
+    let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
+    let rng = crate::crypto::SecureRandom::new();
+
+    let server_key_share =
+        build_server_hello_key_share(&ch, Some(TLS_NAMED_GROUP_X25519), &rng)
+            .expect("profiled X25519 share must be selected when client offers it");
+
+    assert_eq!(server_key_share.group(), TLS_NAMED_GROUP_X25519);
+    assert_eq!(server_key_share.key_exchange().len(), X25519_KEY_SHARE_LEN);
+}
+
+#[test]
+fn build_server_hello_key_share_falls_back_from_bad_profiled_x25519_to_hybrid() {
+    let key_share = client_key_share_extension(&[(
+        TLS_NAMED_GROUP_X25519MLKEM768,
+        X25519MLKEM768_CLIENT_KEY_SHARE_LEN,
+    )]);
+    let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
+    let rng = crate::crypto::SecureRandom::new();
+
+    let server_key_share =
+        build_server_hello_key_share(&ch, Some(TLS_NAMED_GROUP_X25519), &rng)
+            .expect("hybrid share must be selected when profiled X25519 is unavailable");
+
+    assert_eq!(server_key_share.group(), TLS_NAMED_GROUP_X25519MLKEM768);
+    assert_eq!(
+        server_key_share.key_exchange().len(),
+        X25519MLKEM768_SERVER_KEY_SHARE_LEN
     );
 }
 
@@ -1946,12 +2030,15 @@ fn build_x25519mlkem768_server_key_share_rejects_all_zero_x25519_share() {
 }
 
 #[test]
-fn select_server_hello_key_share_group_rejects_without_hybrid_share() {
+fn select_server_hello_key_share_group_accepts_x25519_when_hybrid_is_absent() {
     let key_share =
         client_key_share_extension(&[(TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN)]);
     let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
 
-    assert_eq!(select_server_hello_key_share_group(&ch), None);
+    assert_eq!(
+        select_server_hello_key_share_group(&ch),
+        Some(TLS_NAMED_GROUP_X25519)
+    );
 }
 
 #[test]

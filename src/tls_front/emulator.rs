@@ -6,7 +6,8 @@ use crate::protocol::constants::{
     TLS_RECORD_HANDSHAKE, TLS_VERSION,
 };
 use crate::protocol::tls::{
-    ClientHelloTlsVersion, TLS_DIGEST_LEN, TLS_DIGEST_POS, TLS_NAMED_GROUP_X25519MLKEM768,
+    ClientHelloTlsVersion, ServerHelloKeyShare, TLS_DIGEST_LEN, TLS_DIGEST_POS,
+    TLS_NAMED_GROUP_X25519, TLS_NAMED_GROUP_X25519MLKEM768,
 };
 use crate::tls_front::types::{
     CachedTlsData, ParsedCertificateInfo, TlsExtension, TlsProfileSource,
@@ -19,6 +20,40 @@ const MAX_TICKET_RECORDS: usize = 4;
 const EXT_SUPPORTED_VERSIONS: u16 = 0x002b;
 const EXT_KEY_SHARE: u16 = 0x0033;
 const EXT_ALPN: u16 = 0x0010;
+
+fn parse_profiled_key_share_group(data: &[u8]) -> Option<u16> {
+    if data.len() < 4 {
+        return None;
+    }
+
+    let group = u16::from_be_bytes([data[0], data[1]]);
+    let key_exchange_len = u16::from_be_bytes([data[2], data[3]]) as usize;
+    if data.len() != 4 + key_exchange_len {
+        return None;
+    }
+
+    match group {
+        TLS_NAMED_GROUP_X25519 | TLS_NAMED_GROUP_X25519MLKEM768 => Some(group),
+        _ => None,
+    }
+}
+
+/// Return the origin-profiled ServerHello key_share group when it is replay-safe.
+pub(crate) fn profiled_server_hello_key_share_group(cached: &CachedTlsData) -> Option<u16> {
+    if !matches!(
+        cached.behavior_profile.source,
+        TlsProfileSource::Raw | TlsProfileSource::Merged
+    ) {
+        return None;
+    }
+
+    cached
+        .server_hello_template
+        .extensions
+        .iter()
+        .find(|ext| ext.ext_type == EXT_KEY_SHARE)
+        .and_then(|ext| parse_profiled_key_share_group(&ext.data))
+}
 
 fn jitter_and_clamp_sizes(sizes: &[usize], rng: &SecureRandom) -> Vec<usize> {
     sizes
@@ -208,18 +243,18 @@ fn push_key_share_entry(extensions: &mut Vec<u8>, group: u16, key_exchange: &[u8
     extensions.extend_from_slice(key_exchange);
 }
 
-fn push_key_share_extension(extensions: &mut Vec<u8>, server_key_share: &[u8]) {
+fn push_key_share_extension(extensions: &mut Vec<u8>, server_key_share: &ServerHelloKeyShare) {
     push_key_share_entry(
         extensions,
-        TLS_NAMED_GROUP_X25519MLKEM768,
-        server_key_share,
+        server_key_share.group(),
+        server_key_share.key_exchange(),
     );
 }
 
 fn replay_profiled_server_hello_extension(
     ext: &TlsExtension,
     extensions: &mut Vec<u8>,
-    server_key_share: &[u8],
+    server_key_share: &ServerHelloKeyShare,
     saw_supported_versions: &mut bool,
     saw_key_share: &mut bool,
 ) {
@@ -239,7 +274,7 @@ fn replay_profiled_server_hello_extension(
 
 fn build_profiled_server_hello_extensions(
     cached: &CachedTlsData,
-    server_key_share: &[u8],
+    server_key_share: &ServerHelloKeyShare,
 ) -> Vec<u8> {
     let capacity = cached
         .server_hello_template
@@ -282,7 +317,7 @@ pub fn build_emulated_server_hello(
     serverhello_compact: bool,
     client_tls_version: ClientHelloTlsVersion,
     selected_cipher_suite: [u8; 2],
-    server_key_share: &[u8],
+    server_key_share: &ServerHelloKeyShare,
     rng: &SecureRandom,
     alpn: Option<Vec<u8>>,
     new_session_tickets: u8,
@@ -469,13 +504,16 @@ mod tests {
 
     use super::{
         build_compact_cert_info_payload, build_emulated_server_hello,
-        hash_compact_cert_info_payload,
+        hash_compact_cert_info_payload, profiled_server_hello_key_share_group,
     };
     use crate::crypto::SecureRandom;
     use crate::protocol::constants::{
         TLS_RECORD_APPLICATION, TLS_RECORD_CHANGE_CIPHER, TLS_RECORD_HANDSHAKE,
     };
-    use crate::protocol::tls::ClientHelloTlsVersion;
+    use crate::protocol::tls::{
+        ClientHelloTlsVersion, ServerHelloKeyShare, TLS_NAMED_GROUP_X25519,
+        TLS_NAMED_GROUP_X25519MLKEM768,
+    };
 
     fn first_app_data_payload(response: &[u8]) -> &[u8] {
         let hello_len = u16::from_be_bytes([response[3], response[4]]) as usize;
@@ -540,8 +578,42 @@ mod tests {
         }
     }
 
-    fn test_server_key_share() -> Vec<u8> {
-        vec![0x42; 1120]
+    fn test_server_key_share() -> ServerHelloKeyShare {
+        ServerHelloKeyShare::new(TLS_NAMED_GROUP_X25519MLKEM768, vec![0x42; 1120])
+    }
+
+    fn server_key_share_extension_data(group: u16, len: usize) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&group.to_be_bytes());
+        data.extend_from_slice(&(len as u16).to_be_bytes());
+        data.resize(4 + len, 0x42);
+        data
+    }
+
+    #[test]
+    fn profiled_server_hello_key_share_group_reads_raw_x25519_profile() {
+        let mut cached = make_cached(None);
+        cached.behavior_profile.source = TlsProfileSource::Raw;
+        cached.server_hello_template.extensions = vec![TlsExtension {
+            ext_type: 0x0033,
+            data: server_key_share_extension_data(TLS_NAMED_GROUP_X25519, 32),
+        }];
+
+        assert_eq!(
+            profiled_server_hello_key_share_group(&cached),
+            Some(TLS_NAMED_GROUP_X25519)
+        );
+    }
+
+    #[test]
+    fn profiled_server_hello_key_share_group_ignores_default_profile() {
+        let mut cached = make_cached(None);
+        cached.server_hello_template.extensions = vec![TlsExtension {
+            ext_type: 0x0033,
+            data: server_key_share_extension_data(TLS_NAMED_GROUP_X25519, 32),
+        }];
+
+        assert_eq!(profiled_server_hello_key_share_group(&cached), None);
     }
 
     #[test]
