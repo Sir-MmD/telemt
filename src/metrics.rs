@@ -3989,16 +3989,12 @@ mod tests {
         assert!(
             output.contains("telemt_tls_front_profile_quality_info{domain=\"fallback.example\",quality=\"fallback\",key_share_group=\"none\"} 1")
         );
-        assert!(
-            output.contains(
-                "telemt_tls_front_profile_server_hello_bytes{domain=\"primary.example\"} 90"
-            )
-        );
-        assert!(
-            output.contains(
-                "telemt_tls_front_profile_server_hello_extensions{domain=\"primary.example\"} 2"
-            )
-        );
+        assert!(output.contains(
+            "telemt_tls_front_profile_server_hello_bytes{domain=\"primary.example\"} 90"
+        ));
+        assert!(output.contains(
+            "telemt_tls_front_profile_server_hello_extensions{domain=\"primary.example\"} 2"
+        ));
         assert!(
             output.contains(
                 "telemt_tls_front_profile_app_data_records{domain=\"primary.example\"} 2"
