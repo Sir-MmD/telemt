@@ -63,9 +63,9 @@
 
 use super::constants::*;
 use crate::crypto::{SecureRandom, sha256_hmac};
-use ml_kem::{B32, EncapsulationKey as MlKemEncapsulationKey, Key as MlKemKey, MlKem768};
 #[cfg(test)]
 use crate::error::ProxyError;
+use ml_kem::{B32, EncapsulationKey as MlKemEncapsulationKey, Key as MlKemKey, MlKem768};
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
@@ -617,8 +617,11 @@ pub(crate) fn build_x25519_server_key_share(
     handshake: &[u8],
     rng: &SecureRandom,
 ) -> Option<Vec<u8>> {
-    let client_key_exchange =
-        client_hello_key_share_group_entry(handshake, TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN)?;
+    let client_key_exchange = client_hello_key_share_group_entry(
+        handshake,
+        TLS_NAMED_GROUP_X25519,
+        X25519_KEY_SHARE_LEN,
+    )?;
     let mut client_x25519 = [0u8; X25519_KEY_SHARE_LEN];
     client_x25519.copy_from_slice(client_key_exchange);
     let (server_x25519_scalar, server_x25519_key) = gen_x25519_key_pair(rng);
@@ -1271,11 +1274,7 @@ fn key_share_extension_group_entry<'a>(
         pos = key_exchange_end;
     }
 
-    if pos == shares_end {
-        found_group
-    } else {
-        None
-    }
+    if pos == shares_end { found_group } else { None }
 }
 
 fn client_hello_key_share_group_entry<'a>(

@@ -9,9 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
-use ml_kem::{
-    DecapsulationKey as MlKemDecapsulationKey, KeyExport, MlKem768, Seed as MlKemSeed,
-};
+use ml_kem::{DecapsulationKey as MlKemDecapsulationKey, KeyExport, MlKem768, Seed as MlKemSeed};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 #[cfg(unix)]
@@ -514,13 +512,11 @@ fn gen_x25519mlkem768_client_key_share(
     deterministic: bool,
     seed: &str,
 ) -> Option<Vec<u8>> {
-    let mlkem_key = gen_mlkem768_client_encapsulation_key(
-        rng,
-        deterministic,
-        &format!("{seed}:mlkem768"),
-    )?;
+    let mlkem_key =
+        gen_mlkem768_client_encapsulation_key(rng, deterministic, &format!("{seed}:mlkem768"))?;
     let x25519_key = gen_key_share(rng, deterministic, &format!("{seed}:x25519"));
-    let mut key_share = Vec::with_capacity(MLKEM768_CLIENT_ENCAPSULATION_KEY_LEN + x25519_key.len());
+    let mut key_share =
+        Vec::with_capacity(MLKEM768_CLIENT_ENCAPSULATION_KEY_LEN + x25519_key.len());
     key_share.extend_from_slice(&mlkem_key);
     key_share.extend_from_slice(&x25519_key);
     Some(key_share)
@@ -661,8 +657,7 @@ fn build_client_hello(
         profile,
         TlsFetchProfile::ModernChromeLike | TlsFetchProfile::ModernFirefoxLike
     ) {
-        if let Some(key) =
-            gen_x25519mlkem768_client_key_share(rng, deterministic, &key_share_seed)
+        if let Some(key) = gen_x25519mlkem768_client_key_share(rng, deterministic, &key_share_seed)
         {
             push_client_key_share_entry(&mut keyshare, TLS_NAMED_GROUP_X25519MLKEM768, &key);
         }
@@ -1531,10 +1526,9 @@ mod tests {
 
     use super::{
         MLKEM768_CLIENT_ENCAPSULATION_KEY_LEN, ProfileCacheValue, TLS_NAMED_GROUP_X25519,
-        TLS_NAMED_GROUP_X25519MLKEM768, TlsFetchStrategy, X25519_KEY_SHARE_LEN,
-        build_client_hello, build_tls_fetch_proxy_header, derive_behavior_profile,
-        encode_tls13_certificate_message, fetch_via_rustls_stream, order_profiles, profile_alpn,
-        profile_cache, profile_cache_key,
+        TLS_NAMED_GROUP_X25519MLKEM768, TlsFetchStrategy, X25519_KEY_SHARE_LEN, build_client_hello,
+        build_tls_fetch_proxy_header, derive_behavior_profile, encode_tls13_certificate_message,
+        fetch_via_rustls_stream, order_profiles, profile_alpn, profile_cache, profile_cache_key,
     };
     use crate::config::TlsFetchProfile;
     use crate::crypto::SecureRandom;
@@ -1886,8 +1880,14 @@ mod tests {
             u16::from_be_bytes([key_share_data[pos + 2], key_share_data[pos + 3]]) as usize;
         pos += 4;
         let key = &key_share_data[pos..pos + key_len];
-        assert_eq!(group, TLS_NAMED_GROUP_X25519, "second key_share group must be x25519");
-        assert_eq!(key_len, X25519_KEY_SHARE_LEN, "x25519 key length must be 32");
+        assert_eq!(
+            group, TLS_NAMED_GROUP_X25519,
+            "second key_share group must be x25519"
+        );
+        assert_eq!(
+            key_len, X25519_KEY_SHARE_LEN,
+            "x25519 key length must be 32"
+        );
         assert!(
             key.iter().any(|b| *b != 0),
             "x25519 key must not be all zero"

@@ -1527,11 +1527,12 @@ where
             && matches!(client_tls_version, tls::ClientHelloTlsVersion::Tls12)
         {
             if let Some(cache) = tls_cache.as_ref() {
-                cache.take_full_cert_budget_for_ip(
-                    peer.ip(),
-                    Duration::from_secs(config.censorship.tls_full_cert_ttl_secs),
-                )
-                .await
+                cache
+                    .take_full_cert_budget_for_ip(
+                        peer.ip(),
+                        Duration::from_secs(config.censorship.tls_full_cert_ttl_secs),
+                    )
+                    .await
             } else {
                 true
             }

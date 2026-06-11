@@ -1849,10 +1849,7 @@ fn select_server_hello_cipher_suite_ignores_profile_tls12_cipher() {
 #[test]
 fn select_server_hello_cipher_suite_rejects_without_offered_tls13_suite() {
     let ch = build_client_hello_with_ciphers_and_exts(&[[0xc0, 0x2f]], Vec::new(), "example.com");
-    assert_eq!(
-        select_server_hello_cipher_suite(&ch, [0x13, 0x01]),
-        None
-    );
+    assert_eq!(select_server_hello_cipher_suite(&ch, [0x13, 0x01]), None);
 }
 
 #[test]
@@ -1869,10 +1866,7 @@ fn select_server_hello_cipher_suite_rejects_malformed_clienthello() {
     let mut ch =
         build_client_hello_with_ciphers_and_exts(&[[0x13, 0x03]], Vec::new(), "example.com");
     ch.truncate(12);
-    assert_eq!(
-        select_server_hello_cipher_suite(&ch, [0x13, 0x01]),
-        None
-    );
+    assert_eq!(select_server_hello_cipher_suite(&ch, [0x13, 0x01]), None);
 }
 
 #[test]
@@ -1974,9 +1968,8 @@ fn build_server_hello_key_share_prefers_profiled_x25519() {
     let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
     let rng = crate::crypto::SecureRandom::new();
 
-    let server_key_share =
-        build_server_hello_key_share(&ch, Some(TLS_NAMED_GROUP_X25519), &rng)
-            .expect("profiled X25519 share must be selected when client offers it");
+    let server_key_share = build_server_hello_key_share(&ch, Some(TLS_NAMED_GROUP_X25519), &rng)
+        .expect("profiled X25519 share must be selected when client offers it");
 
     assert_eq!(server_key_share.group(), TLS_NAMED_GROUP_X25519);
     assert_eq!(server_key_share.key_exchange().len(), X25519_KEY_SHARE_LEN);
@@ -1991,9 +1984,8 @@ fn build_server_hello_key_share_falls_back_from_bad_profiled_x25519_to_hybrid() 
     let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
     let rng = crate::crypto::SecureRandom::new();
 
-    let server_key_share =
-        build_server_hello_key_share(&ch, Some(TLS_NAMED_GROUP_X25519), &rng)
-            .expect("hybrid share must be selected when profiled X25519 is unavailable");
+    let server_key_share = build_server_hello_key_share(&ch, Some(TLS_NAMED_GROUP_X25519), &rng)
+        .expect("hybrid share must be selected when profiled X25519 is unavailable");
 
     assert_eq!(server_key_share.group(), TLS_NAMED_GROUP_X25519MLKEM768);
     assert_eq!(
@@ -2032,8 +2024,7 @@ fn build_x25519mlkem768_server_key_share_rejects_all_zero_x25519_share() {
 
 #[test]
 fn select_server_hello_key_share_group_accepts_x25519_when_hybrid_is_absent() {
-    let key_share =
-        client_key_share_extension(&[(TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN)]);
+    let key_share = client_key_share_extension(&[(TLS_NAMED_GROUP_X25519, X25519_KEY_SHARE_LEN)]);
     let ch = build_client_hello_with_exts(vec![(0x0033, key_share)], "example.com");
 
     assert_eq!(

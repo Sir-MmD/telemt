@@ -57,9 +57,9 @@ fn should_replay_profiled_server_hello_shape(cached: &CachedTlsData) -> bool {
     matches!(
         cached.behavior_profile.source,
         TlsProfileSource::Raw | TlsProfileSource::Merged
-    ) && cached.server_hello_template.is_replay_safe_tls13_shape(
-        effective_profiled_server_hello_record_len(cached),
-    )
+    ) && cached
+        .server_hello_template
+        .is_replay_safe_tls13_shape(effective_profiled_server_hello_record_len(cached))
 }
 
 /// Return the origin-profiled ServerHello key_share group when it is replay-safe.

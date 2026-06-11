@@ -217,7 +217,10 @@ impl TlsBehaviorProfile {
     /// Refresh cached visible ServerHello summary fields and quality.
     pub(crate) fn refresh_server_hello_summary(&mut self, server_hello: &ParsedServerHello) {
         let mut has_replay_safe_server_hello = false;
-        if matches!(self.source, TlsProfileSource::Raw | TlsProfileSource::Merged) {
+        if matches!(
+            self.source,
+            TlsProfileSource::Raw | TlsProfileSource::Merged
+        ) {
             if self.server_hello_record_len == 0 {
                 self.server_hello_record_len = server_hello.record_body_len();
             }
@@ -236,9 +239,10 @@ impl TlsBehaviorProfile {
 
     /// Recompute the profile quality from current source and record-size evidence.
     fn refresh_quality(&mut self, has_replay_safe_server_hello: bool) {
-        let has_raw_server_hello =
-            matches!(self.source, TlsProfileSource::Raw | TlsProfileSource::Merged)
-                && has_replay_safe_server_hello;
+        let has_raw_server_hello = matches!(
+            self.source,
+            TlsProfileSource::Raw | TlsProfileSource::Merged
+        ) && has_replay_safe_server_hello;
         self.quality = if has_raw_server_hello && !self.app_data_record_sizes.is_empty() {
             TlsProfileQuality::RawStrict
         } else if has_raw_server_hello {
