@@ -352,6 +352,11 @@ const LISTENER_CONFIG_KEYS: &[&str] = &[
     "synlimit_seconds",
     "synlimit_hitcount",
     "synlimit_burst",
+    "synlimit_ios_seconds",
+    "synlimit_ios_hitcount",
+    "synlimit_ios_burst",
+    "synlimit_hashlimit_expire_ms",
+    "synlimit_hashlimit_size",
     "announce",
     "announce_ip",
     "proxy_protocol",
@@ -2014,6 +2019,31 @@ impl ProxyConfig {
                     "server.listeners[{idx}].synlimit_burst must be > 0"
                 )));
             }
+            if listener.synlimit_ios_seconds == 0 {
+                return Err(ProxyError::Config(format!(
+                    "server.listeners[{idx}].synlimit_ios_seconds must be > 0"
+                )));
+            }
+            if listener.synlimit_ios_hitcount == 0 {
+                return Err(ProxyError::Config(format!(
+                    "server.listeners[{idx}].synlimit_ios_hitcount must be > 0"
+                )));
+            }
+            if listener.synlimit_ios_burst == 0 {
+                return Err(ProxyError::Config(format!(
+                    "server.listeners[{idx}].synlimit_ios_burst must be > 0"
+                )));
+            }
+            if listener.synlimit_hashlimit_expire_ms == 0 {
+                return Err(ProxyError::Config(format!(
+                    "server.listeners[{idx}].synlimit_hashlimit_expire_ms must be > 0"
+                )));
+            }
+            if listener.synlimit_hashlimit_size == 0 {
+                return Err(ProxyError::Config(format!(
+                    "server.listeners[{idx}].synlimit_hashlimit_size must be > 0"
+                )));
+            }
         }
 
         if config.server.accept_permit_timeout_ms > 60_000 {
@@ -2256,6 +2286,11 @@ impl ProxyConfig {
                     synlimit_seconds: default_synlimit_seconds(),
                     synlimit_hitcount: default_synlimit_hitcount(),
                     synlimit_burst: default_synlimit_burst(),
+                    synlimit_ios_seconds: default_synlimit_ios_seconds(),
+                    synlimit_ios_hitcount: default_synlimit_ios_hitcount(),
+                    synlimit_ios_burst: default_synlimit_ios_burst(),
+                    synlimit_hashlimit_expire_ms: default_synlimit_hashlimit_expire_ms(),
+                    synlimit_hashlimit_size: default_synlimit_hashlimit_size(),
                     announce: None,
                     announce_ip: None,
                     proxy_protocol: None,
@@ -2273,6 +2308,11 @@ impl ProxyConfig {
                     synlimit_seconds: default_synlimit_seconds(),
                     synlimit_hitcount: default_synlimit_hitcount(),
                     synlimit_burst: default_synlimit_burst(),
+                    synlimit_ios_seconds: default_synlimit_ios_seconds(),
+                    synlimit_ios_hitcount: default_synlimit_ios_hitcount(),
+                    synlimit_ios_burst: default_synlimit_ios_burst(),
+                    synlimit_hashlimit_expire_ms: default_synlimit_hashlimit_expire_ms(),
+                    synlimit_hashlimit_size: default_synlimit_hashlimit_size(),
                     announce: None,
                     announce_ip: None,
                     proxy_protocol: None,
@@ -2464,6 +2504,78 @@ mod tests {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_dir(dir);
         error
+    }
+
+    #[test]
+    fn synlimit_synfix_defaults_are_loaded_for_listener() {
+        let cfg = load_config_from_temp_toml(
+            r#"
+                [censorship]
+                tls_domain = "example.com"
+
+                [access.users]
+                user = "00000000000000000000000000000000"
+
+                [[server.listeners]]
+                ip = "0.0.0.0"
+                port = 443
+                synlimit = "iptables"
+            "#,
+        );
+
+        let listener = &cfg.server.listeners[0];
+        assert_eq!(listener.synlimit_seconds, 60);
+        assert_eq!(listener.synlimit_hitcount, 48);
+        assert_eq!(listener.synlimit_burst, 1);
+        assert_eq!(listener.synlimit_ios_seconds, 1);
+        assert_eq!(listener.synlimit_ios_hitcount, 12);
+        assert_eq!(listener.synlimit_ios_burst, 24);
+        assert_eq!(listener.synlimit_hashlimit_expire_ms, 60_000);
+        assert_eq!(listener.synlimit_hashlimit_size, 32_768);
+    }
+
+    #[test]
+    fn synlimit_synfix_zero_values_are_rejected() {
+        for (field, expected) in [
+            (
+                "synlimit_ios_seconds",
+                "server.listeners[0].synlimit_ios_seconds must be > 0",
+            ),
+            (
+                "synlimit_ios_hitcount",
+                "server.listeners[0].synlimit_ios_hitcount must be > 0",
+            ),
+            (
+                "synlimit_ios_burst",
+                "server.listeners[0].synlimit_ios_burst must be > 0",
+            ),
+            (
+                "synlimit_hashlimit_expire_ms",
+                "server.listeners[0].synlimit_hashlimit_expire_ms must be > 0",
+            ),
+            (
+                "synlimit_hashlimit_size",
+                "server.listeners[0].synlimit_hashlimit_size must be > 0",
+            ),
+        ] {
+            let toml = format!(
+                r#"
+                    [censorship]
+                    tls_domain = "example.com"
+
+                    [access.users]
+                    user = "00000000000000000000000000000000"
+
+                    [[server.listeners]]
+                    ip = "0.0.0.0"
+                    port = 443
+                    synlimit = "iptables"
+                    {field} = 0
+                "#
+            );
+            let error = load_config_error_from_temp_toml(&toml);
+            assert!(error.contains(expected), "{field}: {error}");
+        }
     }
 
     #[test]
