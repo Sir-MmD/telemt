@@ -39,8 +39,14 @@ async fn wait_for_config_channel_close_and_reconcile(
 }
 
 pub(crate) async fn reconcile_synlimit_rules(cfg: &ProxyConfig) {
-    if let Err(error) = clear_synlimit_rules_all_backends().await {
-        warn!(error = %error, "Failed to clear existing SYN limiter rules before reconcile");
+    match clear_synlimit_rules_all_backends().await {
+        Ok(true) => {
+            warn!("Removed stale SYN limiter rules left by a previous run before reconcile");
+        }
+        Ok(false) => {}
+        Err(error) => {
+            warn!(error = %error, "Failed to clear stale SYN limiter rules before reconcile");
+        }
     }
 
     let targets = synlimit_targets(cfg);
@@ -66,24 +72,40 @@ pub(crate) async fn reconcile_synlimit_rules(cfg: &ProxyConfig) {
     }
 }
 
-pub(crate) async fn clear_synlimit_rules_all_backends() -> Result<(), String> {
+pub(crate) async fn clear_synlimit_rules_all_backends() -> Result<bool, String> {
     if !has_cap_net_admin() {
-        return Ok(());
+        return Ok(false);
     }
 
     let mut errors = Vec::new();
-    if let Err(error) = nftables::clear_rules_all_families().await {
-        errors.push(error);
+    let mut removed = false;
+    match nftables::clear_rules_all_families().await {
+        Ok(value) => {
+            removed |= value;
+        }
+        Err(error) => {
+            errors.push(error);
+        }
     }
-    if let Err(error) = iptables::clear_rules_for_binary("iptables").await {
-        errors.push(error);
+    match iptables::clear_rules_for_binary("iptables").await {
+        Ok(value) => {
+            removed |= value;
+        }
+        Err(error) => {
+            errors.push(error);
+        }
     }
-    if let Err(error) = iptables::clear_rules_for_binary("ip6tables").await {
-        errors.push(error);
+    match iptables::clear_rules_for_binary("ip6tables").await {
+        Ok(value) => {
+            removed |= value;
+        }
+        Err(error) => {
+            errors.push(error);
+        }
     }
 
     if errors.is_empty() {
-        Ok(())
+        Ok(removed)
     } else {
         Err(errors.join("; "))
     }

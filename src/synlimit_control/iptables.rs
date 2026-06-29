@@ -226,8 +226,9 @@ fn iptables_reject_args() -> Vec<String> {
     ]
 }
 
-pub(super) async fn clear_rules_for_binary(binary: &str) -> Result<(), String> {
+pub(super) async fn clear_rules_for_binary(binary: &str) -> Result<bool, String> {
     let mut errors = Vec::new();
+    let mut removed = false;
     for _ in 0..8 {
         match run_command(
             binary,
@@ -236,7 +237,9 @@ pub(super) async fn clear_rules_for_binary(binary: &str) -> Result<(), String> {
         )
         .await
         {
-            Ok(()) => {}
+            Ok(()) => {
+                removed = true;
+            }
             Err(error) if is_missing_command_or_iptables_rule(&error) => break,
             Err(error) => {
                 errors.push(format!("{binary} delete INPUT jump failed: {error}"));
@@ -244,19 +247,27 @@ pub(super) async fn clear_rules_for_binary(binary: &str) -> Result<(), String> {
             }
         }
     }
-    if let Err(error) = run_command(binary, &["-t", "filter", "-F", IPTABLES_CHAIN], None).await
-        && !is_missing_command_or_iptables_rule(&error)
-    {
-        errors.push(format!("{binary} flush chain failed: {error}"));
+    match run_command(binary, &["-t", "filter", "-F", IPTABLES_CHAIN], None).await {
+        Ok(()) => {
+            removed = true;
+        }
+        Err(error) if is_missing_command_or_iptables_rule(&error) => {}
+        Err(error) => {
+            errors.push(format!("{binary} flush chain failed: {error}"));
+        }
     }
-    if let Err(error) = run_command(binary, &["-t", "filter", "-X", IPTABLES_CHAIN], None).await
-        && !is_missing_command_or_iptables_rule(&error)
-    {
-        errors.push(format!("{binary} delete chain failed: {error}"));
+    match run_command(binary, &["-t", "filter", "-X", IPTABLES_CHAIN], None).await {
+        Ok(()) => {
+            removed = true;
+        }
+        Err(error) if is_missing_command_or_iptables_rule(&error) => {}
+        Err(error) => {
+            errors.push(format!("{binary} delete chain failed: {error}"));
+        }
     }
 
     if errors.is_empty() {
-        Ok(())
+        Ok(removed)
     } else {
         Err(errors.join(", "))
     }
@@ -266,6 +277,7 @@ fn is_missing_command_or_iptables_rule(error: &str) -> bool {
     error.contains("is not available")
         || error.contains("No chain/target/match by that name")
         || error.contains("does not exist")
+        || error.contains("Couldn't load target")
 }
 
 #[cfg(test)]
