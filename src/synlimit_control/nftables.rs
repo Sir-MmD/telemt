@@ -186,26 +186,32 @@ fn push_nft_v6_rules(script: &mut String, target: &SynLimitRule, idx: usize) {
     ));
 }
 
-pub(super) async fn clear_rules_all_families() -> Result<(), String> {
+pub(super) async fn clear_rules_all_families() -> Result<bool, String> {
     let mut errors = Vec::new();
+    let mut removed = false;
     for family in [NftFamily::Inet, NftFamily::Ip, NftFamily::Ip6] {
-        if let Err(error) = run_command(
+        match run_command(
             "nft",
             &["delete", "table", family.as_str(), NFT_TABLE],
             None,
         )
         .await
-            && !is_missing_command_or_nft_table(&error)
         {
-            errors.push(format!(
-                "nft delete table {} {NFT_TABLE} failed: {error}",
-                family.as_str()
-            ));
+            Ok(()) => {
+                removed = true;
+            }
+            Err(error) if is_missing_command_or_nft_table(&error) => {}
+            Err(error) => {
+                errors.push(format!(
+                    "nft delete table {} {NFT_TABLE} failed: {error}",
+                    family.as_str()
+                ));
+            }
         }
     }
 
     if errors.is_empty() {
-        Ok(())
+        Ok(removed)
     } else {
         Err(errors.join(", "))
     }
