@@ -120,6 +120,11 @@ pub struct HotFields {
     pub me_health_interval_ms_healthy: u64,
     pub me_admission_poll_ms: u64,
     pub me_warn_rate_limit_ms: u64,
+    /// Process-wide connection modes. Hot because a control plane derives them from
+    /// its account set (the union of every account's allowed modes), so enabling a
+    /// mode for one account changes them. Without reload, the listener keeps the old
+    /// set and refuses a mode the config says is on until the next restart.
+    pub modes: crate::config::types::ProxyModes,
     pub users: std::collections::HashMap<String, String>,
     pub user_enabled: std::collections::HashMap<String, bool>,
     pub user_ad_tags: std::collections::HashMap<String, String>,
@@ -266,6 +271,7 @@ impl HotFields {
             me_health_interval_ms_healthy: cfg.general.me_health_interval_ms_healthy,
             me_admission_poll_ms: cfg.general.me_admission_poll_ms,
             me_warn_rate_limit_ms: cfg.general.me_warn_rate_limit_ms,
+            modes: cfg.general.modes.clone(),
             users: cfg.access.users.clone(),
             user_enabled: cfg.access.user_enabled.clone(),
             user_ad_tags: cfg.access.user_ad_tags.clone(),
@@ -597,6 +603,9 @@ fn overlay_hot_fields(old: &ProxyConfig, new: &ProxyConfig) -> ProxyConfig {
     cfg.general.me_admission_poll_ms = new.general.me_admission_poll_ms;
     cfg.general.me_warn_rate_limit_ms = new.general.me_warn_rate_limit_ms;
 
+    // Read per-connection by mode_enabled_for_proto, so a new value takes effect on
+    // the next handshake. Existing connections are past that check and unaffected.
+    cfg.general.modes = new.general.modes.clone();
     cfg.access.users = new.access.users.clone();
     cfg.access.user_enabled = new.access.user_enabled.clone();
     cfg.access.user_ad_tags = new.access.user_ad_tags.clone();
@@ -908,6 +917,14 @@ fn log_changes(
         tracing::info!(
             "config reload: user_modes updated ({} entries)",
             new_hot.user_modes.len(),
+        );
+    }
+    if old_hot.modes != new_hot.modes {
+        tracing::info!(
+            "config reload: general.modes updated (classic={} secure={} tls={})",
+            new_hot.modes.classic,
+            new_hot.modes.secure,
+            new_hot.modes.tls,
         );
     }
 

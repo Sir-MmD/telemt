@@ -374,7 +374,7 @@ impl Default for TelemetryConfig {
 
 // ============= Sub-Configs =============
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProxyModes {
     #[serde(default)]
     pub classic: bool,
