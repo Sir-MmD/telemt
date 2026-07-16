@@ -2389,6 +2389,19 @@ pub struct UpstreamConfig {
     pub scopes: String,
     #[serde(skip)]
     pub selected_scope: String,
+    /// Send the AUTHENTICATED ACCOUNT NAME as the SOCKS5 username for this upstream.
+    ///
+    /// Off by default, so existing configs are unchanged. When on, the account that
+    /// authenticated to the proxy identifies itself to the upstream, which lets an
+    /// upstream SOCKS5 server (e.g. an Xray socks inbound with per-user accounts)
+    /// route per client.
+    ///
+    /// This is deliberately SEPARATE from `scopes`/`selected_scope`: reusing the scope
+    /// for identity would force every account to be listed in `scopes`, and
+    /// `[[upstreams]]` is not hot-reloadable — so adding one account would restart the
+    /// proxy and drop every live connection.
+    #[serde(default)]
+    pub socks_user_from_account: bool,
     /// Allow IPv4 DC targets for this upstream.
     /// `None` means auto-detect from runtime connectivity state.
     #[serde(default)]

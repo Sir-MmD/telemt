@@ -1330,6 +1330,7 @@ impl ProxyConfig {
                 enabled: true,
                 scopes: String::new(),
                 selected_scope: String::new(),
+                socks_user_from_account: false,
                 ipv4: None,
                 ipv6: None,
                 prefer: None,

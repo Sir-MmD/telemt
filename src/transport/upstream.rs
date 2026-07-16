@@ -861,6 +861,22 @@ impl UpstreamManager {
         dc_idx: Option<i16>,
         scope: Option<&str>,
     ) -> Result<UpstreamStream> {
+        self.connect_as(target, dc_idx, scope, None).await
+    }
+
+    /// Like `connect`, but also carries the AUTHENTICATED ACCOUNT so an upstream with
+    /// `socks_user_from_account = true` presents it as the SOCKS5 username. The account
+    /// never affects upstream SELECTION — only identity — so `scopes` keeps its existing
+    /// meaning and needs no per-account entries (which would matter: `[[upstreams]]` is
+    /// not hot-reloadable, so listing accounts there would restart the proxy on every
+    /// account add and drop every live connection).
+    pub async fn connect_as(
+        &self,
+        target: SocketAddr,
+        dc_idx: Option<i16>,
+        scope: Option<&str>,
+        account: Option<&str>,
+    ) -> Result<UpstreamStream> {
         let idx = self
             .select_upstream(dc_idx, scope)
             .await
@@ -882,6 +898,14 @@ impl UpstreamManager {
 
         if let Some(s) = scope {
             upstream.selected_scope = s.to_string();
+        }
+        // The authenticated account wins over any scope-derived identity: the whole
+        // point of the flag is that the UPSTREAM learns which client this is.
+        if upstream.socks_user_from_account
+            && let Some(a) = account
+            && !a.is_empty()
+        {
+            upstream.selected_scope = a.to_string();
         }
 
         let target = if dc_idx.is_some() {
@@ -2124,6 +2148,7 @@ mod tests {
             enabled: true,
             scopes: String::new(),
             selected_scope: String::new(),
+            socks_user_from_account: false,
             ipv4: None,
             ipv6: None,
             prefer: None,
@@ -2180,6 +2205,7 @@ mod tests {
                 enabled: true,
                 scopes: String::new(),
                 selected_scope: String::new(),
+                socks_user_from_account: false,
                 ipv4: None,
                 ipv6: None,
                 prefer: None,

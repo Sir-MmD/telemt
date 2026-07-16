@@ -306,7 +306,7 @@ where
         );
     }
     let tg_stream = tokio::select! {
-        result = upstream_manager.connect(dc_addr, Some(success.dc_idx), scope_hint) => result?,
+        result = upstream_manager.connect_as(dc_addr, Some(success.dc_idx), scope_hint, Some(user.as_str())) => result?,
         _ = session_cancel.cancelled() => {
             return Err(ProxyError::UserDisabled {
                 user: user.to_string(),

@@ -317,6 +317,7 @@ const ACCESS_CONFIG_KEYS: &[&str] = &[
     "users",
     "user_enabled",
     "user_ad_tags",
+    "user_modes",
     "user_max_tcp_conns",
     "user_max_tcp_conns_global_each",
     "user_expirations",
@@ -348,6 +349,7 @@ const UPSTREAM_CONFIG_KEYS: &[&str] = &[
     "weight",
     "enabled",
     "scopes",
+    "socks_user_from_account",
     "ipv4",
     "ipv6",
 ];
