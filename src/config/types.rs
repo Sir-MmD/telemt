@@ -2072,6 +2072,16 @@ pub struct AccessConfig {
     #[serde(default)]
     pub user_ad_tags: HashMap<String, String>,
 
+    /// Per-user allowed connection modes: a comma-separated list drawn from
+    /// "classic", "secure" and "tls" (e.g. "secure,tls").
+    ///
+    /// An absent or empty entry means the user is unrestricted and only
+    /// `[general.modes]` applies, so existing configs are unaffected. When set the
+    /// user may use ONLY the listed modes even if `[general.modes]` enables more —
+    /// the two are ANDed.
+    #[serde(default)]
+    pub user_modes: HashMap<String, String>,
+
     #[serde(default)]
     pub user_max_tcp_conns: HashMap<String, usize>,
 
@@ -2143,6 +2153,7 @@ impl Default for AccessConfig {
             users: default_access_users(),
             user_enabled: HashMap::new(),
             user_ad_tags: HashMap::new(),
+            user_modes: HashMap::new(),
             user_max_tcp_conns: HashMap::new(),
             user_max_tcp_conns_global_each: default_user_max_tcp_conns_global_each(),
             user_expirations: HashMap::new(),

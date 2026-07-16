@@ -242,6 +242,7 @@ fn validate_mtproto_secret_candidate(
     secret: &[u8; ACCESS_SECRET_BYTES],
     config: &ProxyConfig,
     is_tls: bool,
+    user: Option<&str>,
 ) -> Option<MtprotoCandidateValidation> {
     let mut dec_key_input = Zeroizing::new(Vec::with_capacity(PREKEY_LEN + secret.len()));
     dec_key_input.extend_from_slice(dec_prekey);
@@ -260,6 +261,12 @@ fn validate_mtproto_secret_candidate(
     ];
     let proto_tag = ProtoTag::from_bytes(tag_bytes)?;
     if !mode_enabled_for_proto(config, proto_tag, is_tls) {
+        return None;
+    }
+    // Per-account restriction on top of the global one. Returning None puts the
+    // client on the same path as a wrong secret — the candidate just does not
+    // match — so nothing downstream needs to learn a new rejection reason.
+    if !user_mode_allowed(config, user, proto_tag, is_tls) {
         return None;
     }
 
@@ -724,6 +731,47 @@ fn mode_enabled_for_proto(config: &ProxyConfig, proto_tag: ProtoTag, is_tls: boo
         }
         ProtoTag::Intermediate | ProtoTag::Abridged => config.general.modes.classic,
     }
+}
+
+// The mode name a (proto_tag, is_tls) pair corresponds to, using the SAME mapping as
+// mode_enabled_for_proto above so the two can never drift apart.
+fn mode_name_for_proto(proto_tag: ProtoTag, is_tls: bool) -> &'static str {
+    match proto_tag {
+        ProtoTag::Secure => {
+            if is_tls {
+                "tls"
+            } else {
+                "secure"
+            }
+        }
+        ProtoTag::Intermediate | ProtoTag::Abridged => "classic",
+    }
+}
+
+// Per-account mode restriction ([access.user_modes]); true when the user may use
+// this mode.
+//
+// Absent user, absent entry, or an empty entry all mean "unrestricted", so stock
+// configs behave exactly as before. Unknown tokens are ignored rather than treated
+// as a match, so a typo fails CLOSED for the mode it meant to grant instead of
+// silently granting every mode.
+fn user_mode_allowed(
+    config: &ProxyConfig,
+    user: Option<&str>,
+    proto_tag: ProtoTag,
+    is_tls: bool,
+) -> bool {
+    let Some(user) = user else {
+        return true;
+    };
+    let Some(spec) = config.access.user_modes.get(user) else {
+        return true;
+    };
+    if spec.trim().is_empty() {
+        return true;
+    }
+    let want = mode_name_for_proto(proto_tag, is_tls);
+    spec.split(',').any(|m| m.trim().eq_ignore_ascii_case(want))
 }
 
 fn decode_user_secrets_in(
@@ -1643,6 +1691,7 @@ where
                         &entry.secret,
                         config,
                         is_tls,
+                        Some(entry.user.as_str()),
                     ) {
                         matched_user = entry.user.clone();
                         matched_user_id = Some($user_id);
@@ -1835,6 +1884,7 @@ where
                 &secret_arr,
                 config,
                 is_tls,
+                Some(user.as_str()),
             ) else {
                 continue;
             };

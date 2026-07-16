@@ -123,6 +123,7 @@ pub struct HotFields {
     pub users: std::collections::HashMap<String, String>,
     pub user_enabled: std::collections::HashMap<String, bool>,
     pub user_ad_tags: std::collections::HashMap<String, String>,
+    pub user_modes: std::collections::HashMap<String, String>,
     pub user_max_tcp_conns: std::collections::HashMap<String, usize>,
     pub user_max_tcp_conns_global_each: usize,
     pub user_expirations: std::collections::HashMap<String, chrono::DateTime<chrono::Utc>>,
@@ -268,6 +269,7 @@ impl HotFields {
             users: cfg.access.users.clone(),
             user_enabled: cfg.access.user_enabled.clone(),
             user_ad_tags: cfg.access.user_ad_tags.clone(),
+            user_modes: cfg.access.user_modes.clone(),
             user_max_tcp_conns: cfg.access.user_max_tcp_conns.clone(),
             user_max_tcp_conns_global_each: cfg.access.user_max_tcp_conns_global_each,
             user_expirations: cfg.access.user_expirations.clone(),
@@ -598,6 +600,7 @@ fn overlay_hot_fields(old: &ProxyConfig, new: &ProxyConfig) -> ProxyConfig {
     cfg.access.users = new.access.users.clone();
     cfg.access.user_enabled = new.access.user_enabled.clone();
     cfg.access.user_ad_tags = new.access.user_ad_tags.clone();
+    cfg.access.user_modes = new.access.user_modes.clone();
     cfg.access.user_max_tcp_conns = new.access.user_max_tcp_conns.clone();
     cfg.access.user_max_tcp_conns_global_each = new.access.user_max_tcp_conns_global_each;
     cfg.access.user_expirations = new.access.user_expirations.clone();
@@ -899,6 +902,12 @@ fn log_changes(
         info!(
             "config reload: user_ad_tags updated ({} entries)",
             new_hot.user_ad_tags.len(),
+        );
+    }
+    if old_hot.user_modes != new_hot.user_modes {
+        tracing::info!(
+            "config reload: user_modes updated ({} entries)",
+            new_hot.user_modes.len(),
         );
     }
 
