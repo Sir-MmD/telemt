@@ -1,3 +1,53 @@
+# Telemt (fork)
+
+Fork of [telemt/telemt](https://github.com/telemt/telemt), maintained as the
+MTProto Proxy backend for the vpn-ui panel.
+
+## Upstream version
+
+Based on **telemt 3.4.23** (`Cargo.toml` `version = "3.4.23"`). Pinned so the
+per-account behavior below stays stable across upstream releases.
+
+## Changes in this fork
+
+vpn-ui manages MTProto per ACCOUNT (one inbound serves many accounts) and
+rewrites this config on every client change. Upstream telemt exposes only
+process-wide or per-upstream knobs for the things vpn-ui needs per account, so
+this fork adds three opt-in, hot-reloadable keys. Absent or empty, each behaves
+exactly like stock telemt, so existing configs are unaffected.
+
+- **`[access.user_modes]`: per-account connection modes.**
+  A `username -> "classic,secure,tls"` map restricting which MTProto modes an
+  account may use, ANDed with the process-wide `[general.modes]`. Enforced inside
+  the per-secret candidate validator, so a disallowed mode is refused on the same
+  path as a wrong secret and nothing downstream learns a new failure mode. Unknown
+  tokens fail closed. Without it, widening `[general.modes]` to the union of every
+  account's modes (needed so each account's handshake reaches auth) would let any
+  account use any other account's mode, making the per-account toggles cosmetic.
+  (`src/proxy/handshake.rs`, `src/config/types.rs`)
+
+- **`upstreams.socks_user_from_account`: per-account SOCKS5 identity.**
+  A per-upstream boolean. When set, the authenticated account name is presented as
+  the SOCKS5 username (RFC 1929) to the upstream, so an upstream SOCKS5 server (the
+  vpn-ui Xray socks inbound) can route per client instead of per inbound. Kept
+  separate from `scopes`/`selected_scope` on purpose: it carries identity only and
+  never affects upstream selection, so accounts are added by a hot reload rather
+  than an `[[upstreams]]` change, which is restart-only and would drop every live
+  connection. (`src/transport/upstream.rs`, `src/proxy/direct_relay.rs`)
+
+- **`[general.modes]` made hot-reloadable.**
+  Upstream copied only a fixed set of fields into the live config on reload, so
+  `general.modes` was effectively restart-only. Because vpn-ui derives it from the
+  union of every account's modes, enabling a mode for one account rewrote the
+  config but the listener kept refusing until the next restart. The reloaded value
+  now applies to the next handshake. (`src/config/hot_reload.rs`)
+
+Both new keys are also registered in the strict-key allowlist
+(`src/config/load/strict_keys.rs`), so the validator no longer logs them as
+unknown while in fact honoring them.
+
+---
+
 # Telemt - MTProxy on Rust + Tokio
 
 [![Latest Release](https://img.shields.io/github/v/release/telemt/telemt?color=neon)](https://github.com/telemt/telemt/releases/latest) [![Stars](https://img.shields.io/github/stars/telemt/telemt?style=social)](https://github.com/telemt/telemt/stargazers) [![Forks](https://img.shields.io/github/forks/telemt/telemt?style=social)](https://github.com/telemt/telemt/network/members)
